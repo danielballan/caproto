@@ -9,7 +9,9 @@ import caproto as ca
 from caproto import ChType
 
 
-TEST_SERVER_PORT = 5064
+# A standard libca based server is expected to be accessible on port 5064
+# (e.g. run in a Docker) so we run any caproto servers on 5066.
+TEST_SERVER_PORT = 5066
 
 
 def test_synchronous_client():
