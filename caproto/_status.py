@@ -284,3 +284,11 @@ eca_value_to_status = {value.code_with_severity: value
                        for key, value in globals().items()
                        if key.startswith('ECA_')
                        }
+
+
+def ensure_status_code(status):
+    "Take it an int or a CAStatusCode; return an int."
+    if hasattr(status, 'code'):
+        return status.code
+    else:
+        return int(status)

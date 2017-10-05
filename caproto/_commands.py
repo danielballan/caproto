@@ -53,6 +53,7 @@ from ._dbr import (DBR_INT, DBR_TYPES, ChannelType, float_t, short_t, ushort_t,
                    array_type_code)
 
 from . import _dbr as dbr
+from ._status import eca_value_to_status, ensure_status_code
 from ._utils import (CLIENT, NEED_DATA, REQUEST, RESPONSE, SERVER,
                      CaprotoTypeError, CaprotoValueError,
                      CaprotoNotImplementedError,
@@ -915,13 +916,9 @@ class EventAddResponse(Message):
 
         Number of elements in this reading.
 
-    .. attribute:: sid
+    .. attribute:: status
 
-        Integer ID of this Channel designated by the server.
-
-    .. attribute:: status_code
-
-        As per Channel Access spec, 1 is success; 0 or >1 are various failures.
+        Status information encapsulated in a :class:`CAStatusCode` namedtuple.
 
     .. attribute:: subscriptionid
 
@@ -932,8 +929,9 @@ class EventAddResponse(Message):
     HAS_PAYLOAD = True
 
     def __init__(self, data, data_type, data_count,
-                 status_code, subscriptionid, *, metadata=None):
+                 status, subscriptionid, *, metadata=None):
         size, *buffers = data_payload(data, metadata, data_type, data_count)
+        status_code = ensure_status_code(status)
         header = EventAddResponseHeader(size, data_type, data_count,
                                         status_code, subscriptionid)
         super().__init__(header, *buffers)
@@ -941,8 +939,11 @@ class EventAddResponse(Message):
     payload_size = property(lambda self: self.header.payload_size)
     data_type = property(lambda self: self.header.data_type)
     data_count = property(lambda self: self.header.data_count)
-    status_code = property(lambda self: self.header.parameter1)
     subscriptionid = property(lambda self: self.header.parameter2)
+
+    @property
+    def status(self):
+        return eca_value_to_status(self.header.parameter1)
 
     @property
     def data(self):
@@ -1159,22 +1160,31 @@ class ErrorResponse(Message):
 
     Fields:
 
+    .. attribute:: original_request
+
+        The Message from the client that generated this error.
+
     .. attribute:: cid
 
         Integer ID for this Channel designated by the client.
 
-    .. attribute:: status_code
+    .. attribute:: status
 
-        As per Channel Access spec, 1 is success; 0 or >1 are various failures.
+        Status information encapsulated in a :class:`CAStatusCode` namedtuple.
+
+    .. attrribute:: error_message
+
+        Error message from the server.
 
     """
     __slots__ = ()
     ID = 11
     HAS_PAYLOAD = True
 
-    def __init__(self, original_request, cid, status_code, error_message):
+    def __init__(self, original_request, cid, status, error_message):
         msg_size, msg_payload = padded_string_payload(error_message)
         req_bytes = bytes(original_request.header)
+        status_code = ensure_status_code(status)
 
         size = len(req_bytes) + msg_size
         payload = req_bytes + msg_payload
@@ -1184,7 +1194,10 @@ class ErrorResponse(Message):
 
     payload_size = property(lambda self: self.header.payload_size)
     cid = property(lambda self: self.header.parameter1)
-    status_code = property(lambda self: self.header.parameter2)
+
+    @property
+    def status(self):
+        return eca_value_to_status(self.header.parameter2)
 
     @property
     def error_message(self):
@@ -1313,7 +1326,7 @@ class ReadNotifyResponse(Message):
 
     .. attribute:: status
 
-        As per Channel Access spec, 1 is success; 0 or >1 are various failures.
+        Status information encapsulated in a :class:`CAStatusCode` namedtuple.
 
     .. attribute:: ioid
 
@@ -1327,8 +1340,9 @@ class ReadNotifyResponse(Message):
     def __init__(self, data, data_type, data_count, status, ioid, *,
                  metadata=None):
         size, *buffers = data_payload(data, metadata, data_type, data_count)
-        header = ReadNotifyResponseHeader(size, data_type, data_count, status,
-                                          ioid)
+        status_code = ensure_status_code(status)
+        header = ReadNotifyResponseHeader(size, data_type, data_count,
+                                          status_code, ioid)
         super().__init__(header, *buffers)
 
     payload_size = property(lambda self: self.header.payload_size)
@@ -1341,9 +1355,12 @@ class ReadNotifyResponse(Message):
     def metadata(self):
         return extract_metadata(self.buffers[0], self.data_type)
 
+    @property
+    def status(self):
+        return eca_value_to_status(self.header.parameter1)
+
     data_type = property(lambda self: self.header.data_type)
     data_count = property(lambda self: self.header.data_count)
-    status = property(lambda self: self.header.parameter1)
     ioid = property(lambda self: self.header.parameter2)
 
 
@@ -1504,30 +1521,31 @@ class WriteNotifyResponse(Message):
 
         Number of elements.
 
-    .. attribute:: sid
+    .. attribute:: status
 
-        Integer ID for this Channel designated by the server.
+        Status information encapsulated in a :class:`CAStatusCode` namedtuple.
 
     .. attribute:: ioid
 
         Integer ID for this I/O transaction, echoing
         :class:`WriteNotifyRequest`.
-
-    .. attribute:: status
-
-        As per Channel Access spec, 1 is success; 0 or >1 are various failures.
     """
     __slots__ = ()
     ID = 19
     HAS_PAYLOAD = False
 
     def __init__(self, data_type, data_count, status, ioid):
-        header = WriteNotifyResponseHeader(data_type, data_count, status, ioid)
+        status_code = ensure_status_code(status)
+        header = WriteNotifyResponseHeader(data_type, data_count, status_code,
+                                           ioid)
         super().__init__(header)
+
+    @property
+    def status(self):
+        return eca_value_to_status(self.header.parameter1)
 
     data_type = property(lambda self: self.header.data_type)
     data_count = property(lambda self: self.header.data_count)
-    status = property(lambda self: self.header.parameter1)
     ioid = property(lambda self: self.header.parameter2)
 
 
