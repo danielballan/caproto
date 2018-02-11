@@ -1,6 +1,7 @@
 # This module includes all exceptions raised by caproto, sentinel objects used
 # throughout the package (see detailed comment below), various network-related
 # helper functions, and other miscellaneous utilities.
+import itertools
 import logging
 import os
 import socket
@@ -315,3 +316,37 @@ def spawn_daemon(func, *args, **kwargs):
 
     # all done
     os._exit(os.EX_OK)
+
+
+no_pad = '__no__pad__'
+
+
+def partition_all(n, seq):
+    """ Partition all elements of sequence into tuples of length at most n
+
+    The final tuple may be shorter to accommodate extra elements.
+
+    >>> list(partition_all(2, [1, 2, 3, 4]))
+    [(1, 2), (3, 4)]
+
+    >>> list(partition_all(2, [1, 2, 3, 4, 5]))
+    [(1, 2), (3, 4), (5,)]
+
+    See Also:
+        partition
+
+    Vendored from toolz.itertoolz
+    """
+    args = [iter(seq)] * n
+    it = itertools.zip_longest(*args, fillvalue=no_pad)
+    try:
+        prev = next(it)
+    except StopIteration:
+        return
+    for item in it:
+        yield prev
+        prev = item
+    if prev[-1] is no_pad:
+        yield prev[:prev.index(no_pad)]
+    else:
+        yield prev
