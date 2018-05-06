@@ -36,6 +36,13 @@ from .._utils import batch_requests, CaprotoError, ThreadsafeCounter
 print = partial(print, flush=True)
 
 
+CIRCUIT_DEATH_ATTEMPTS = 3
+
+
+class DeadCircuitError(CaprotoError):
+    ...
+
+
 def master_lock(func):
     """
     Apply to a lock during an instance method's execution.
@@ -59,37 +66,40 @@ def ensure_connected(func):
             # If needed, reconnect. Do this inside the lock so that we don't
             # try to do this twice. (No other threads that need this lock
             # can proceed until the connection is ready anyway!)
-            with self.master_lock:
-                if self._idle or (self.circuit_manager and
-                                  self.circuit_manager.dead):
-                    self.context.reconnect(((self.name, self.priority),))
-                    reconnect = True
-                else:
-                    reconnect = False
-            # Do not bother notifying the self._in_use condition because we
-            # have *increased* the usages here. It will be notified below,
-            # inside the `finally` block, when we decrease the usages.
+            if self._idle:
+                self.context.reconnect(((self.name, self.priority),))
         try:
-            self._wait_for_connection()
-            if reconnect:
-                def requests():
-                    for sub in self.subscriptions.values():
-                        command = sub.compose_command()
-                        # compose_command() returns None if this
-                        # Subscription is inactive (meaning there are no
-                        # user callbacks attached). It will send an
-                        # EventAddRequest on its own if/when the user does
-                        # add any callbacks, so we can skip it here.
-                        if command is not None:
-                            yield command
-                # Batching is probably overkill...unlikely to be very many
-                # requests here....
-                with self.master_lock:
-                    for batch in batch_requests(requests(),
-                                                EVENT_ADD_BATCH_MAX_BYTES):
-                        self.circuit_manager.send(*batch)
-                    self._idle = False
-            result = func(self, *args, **kwargs)
+            # Respect the _total_ timeout specified by the user, but retry in
+            # the event of circuit death.
+            timeout = kwargs.get('timeout')
+            if timeout is not None:
+                deadline = time.monotonic() + timeout
+            for _ in range(CIRCUIT_DEATH_ATTEMPTS):
+                # On each iteration, subtract the time we already spent on any
+                # previous attempts.
+                if timeout is not None:
+                    kwargs['timeout'] = deadline - time.monotonic()
+                self.channel_ready.wait()
+                with self._component_lock:
+                    cm = self.circuit_manager
+                    try:
+                        return func(self, *args, **kwargs)
+                    except DeadCircuitError:
+                        # Something in func tried operate on the circuit after
+                        # it died. The context will automatically build us a
+                        # new circuit. Try again.
+                        continue
+                    except TimeoutError:
+                        # The circuit may have died after func was done calling
+                        # methods on it but before we received some response we
+                        # were expecting. The context will automatically build
+                        # us a new circuit. Try again.
+                        if cm.dead.is_set():
+                            continue
+                        # The circuit is fine -- this is a real error.
+                        raise
+                raise
+
         finally:
             with self._in_use:
                 self._usages -= 1
@@ -605,7 +615,6 @@ class Context:
             client_name = getpass.getuser()
         self.client_name = client_name
         self.log_level = log_level
-        self.search_condition = threading.Condition()
         self.pv_cache_lock = threading.RLock()
         self.master_lock = threading.RLock()
         self.resuscitated_pvs = []
@@ -748,11 +757,7 @@ class Context:
                     cm.channels[cid] = chan
                     cm.pvs[cid] = pv
                     channels_grouped_by_circuit[cm].append(chan)
-
-            # Notify PVs that they now have a circuit_manager. This will
-            # un-block a wait() in the PV.wait_for_search() method.
-            with self.search_condition:
-                self.search_condition.notify_all()
+                    pv.has_live_circuit.set()
 
             # Initiate channel creation with the server.
             for cm, channels in channels_grouped_by_circuit.items():
@@ -888,7 +893,7 @@ class VirtualCircuitManager:
         # keep track of all PV names that are successfully connected to within
         # this circuit. This is to be cleared upon disconnection:
         self.all_created_pvnames = []
-        self._torn_down = False
+        self.dead = threading.Event()
         self._ioid_counter = ThreadsafeCounter()
 
         # Connect.
@@ -1034,11 +1039,11 @@ class VirtualCircuitManager:
 
     @master_lock
     def _disconnected(self):
-        print("DISCONNECTED")
         # Ensure that this method is idempotent.
-        if self._torn_down:
+        if self.dead.is_set():
             return
-        self._torn_down = True
+        print("DISCONNECTED")
+        self.dead.set()
 
         logger.debug('Entered VCM._disconnected')
         self.all_created_pvnames.clear()
@@ -1126,6 +1131,8 @@ class PV:
         self.context = context
         # Use this lock whenever we touch circuit_manager or channel.
         self._component_lock = threading.RLock()
+        self.circuit_ready = threading.Event()
+        self.channel_read = threading.Event()
         self.connection_state_callback = CallbackHandler(self)
         self.access_rights_callback = CallbackHandler(self)
 
@@ -1211,14 +1218,7 @@ class PV:
         timeout : float
             Seconds before a TimeoutError is raised. Default is 2.
         """
-        search_cond = self.context.search_condition
-        with search_cond:
-            if self.circuit_manager is not None:
-                return
-            done = search_cond.wait_for(
-                lambda: self.circuit_manager is not None,
-                timeout)
-        if not done:
+        if not self.circuit_ready.wait(timeout=timeout):
             raise TimeoutError("No servers responded to a search for a "
                                "channel named {!r} within {}-second "
                                "timeout."
