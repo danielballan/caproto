@@ -61,6 +61,9 @@ def master_lock(func):
 
 def ensure_connected(func):
     def inner(self, *args, **kwargs):
+        timeout = kwargs.get('timeout')
+        if timeout is not None:
+            deadline = time.monotonic() + timeout
         with self._in_use:
             self._usages += 1
             # If needed, reconnect. Do this inside the lock so that we don't
@@ -69,17 +72,15 @@ def ensure_connected(func):
             if self._idle:
                 self.context.reconnect(((self.name, self.priority),))
         try:
-            # Respect the _total_ timeout specified by the user, but retry in
-            # the event of circuit death.
-            timeout = kwargs.get('timeout')
-            if timeout is not None:
-                deadline = time.monotonic() + timeout
             for _ in range(CIRCUIT_DEATH_ATTEMPTS):
                 # On each iteration, subtract the time we already spent on any
                 # previous attempts.
                 if timeout is not None:
-                    kwargs['timeout'] = deadline - time.monotonic()
-                self.channel_ready.wait()
+                    timeout = deadline - time.monotonic()
+                self.channel_ready.wait(timeout=timeout)
+                if timeout is not None:
+                    timeout = deadline - time.monotonic()
+                    kwargs['timeout'] = timeout
                 with self._component_lock:
                     cm = self.circuit_manager
                     try:
@@ -703,6 +704,8 @@ class Context:
         for key in keys:
             with self.pv_cache_lock:
                 pv = self.pvs[key]
+            pv.channel_ready.clear()
+            pv.circuit_ready.clear()
             pv.circuit_manager = None
             pv.channel = None
             pvs.append(pv)
@@ -757,7 +760,7 @@ class Context:
                     cm.channels[cid] = chan
                     cm.pvs[cid] = pv
                     channels_grouped_by_circuit[cm].append(chan)
-                    pv.has_live_circuit.set()
+                    pv.circuit_ready.set()
 
             # Initiate channel creation with the server.
             for cm, channels in channels_grouped_by_circuit.items():
@@ -1028,6 +1031,7 @@ class VirtualCircuitManager:
                 chan = self.channels[command.cid]
                 pv.connection_state_changed('connected', chan)
                 self.all_created_pvnames.append(pv.name)
+                pv.channel_ready.set()
             elif isinstance(command, (ca.ServerDisconnResponse,
                                       ca.ClearChannelResponse)):
                 pv = self.pvs[command.cid]
@@ -1043,15 +1047,20 @@ class VirtualCircuitManager:
         if self.dead.is_set():
             return
         print("DISCONNECTED")
-        self.dead.set()
-
         logger.debug('Entered VCM._disconnected')
-        self.all_created_pvnames.clear()
-        for pv in self.pvs.values():
-            pv.connection_state_changed('disconnected', None)
         # Update circuit state. This will be reflected on all PVs, which
         # continue to hold a reference to this disconnected circuit.
         self.circuit.disconnect()
+        self.dead.set()
+        for ioid_info in self.ioids:
+            # Un-block any calls to PV.read() or PV.write() that are waiting on
+            # responses that we now know will never arrive. They will check on
+            # circuit health and raise appropriately.
+            ioid_info['event'].set()
+
+        self.all_created_pvnames.clear()
+        for pv in self.pvs.values():
+            pv.connection_state_changed('disconnected', None)
         # Remove VirtualCircuitManager from Context.
         # This will cause all future calls to Context.get_circuit_manager()
         # to create a fresh VirtualCiruit and VirtualCircuitManager.
@@ -1344,6 +1353,11 @@ class PV:
         # The circuit_manager will put a reference to the response into
         # ioid_info and then set event.
         if not event.wait(timeout=timeout):
+            if self.circuit_manager.dead.is_set():
+                # This is caught be @ensure_connected, which will retry the
+                # function call a couple times in hopes of getting a working
+                # circuit.
+                raise DeadCircuitError()
             raise TimeoutError(
                 f"Server at {self.circuit_manager.circuit.address} did "
                 f"not respond to attempt to read channel named "
