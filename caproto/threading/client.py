@@ -53,18 +53,30 @@ def ensure_connected(func):
             raise TypeError("ensure_connected is intended to decorate methods "
                             "of PV and Subscription.")
         # This `2` matches the default in read, write, wait_for_connection.
-        raw_timeout = kwargs.get('timeout', 2)
-        if raw_timeout is not None:
-            deadline = time.monotonic() + raw_timeout
+        timeout = kwargs.get('timeout', 2)
+        if timeout is not None:
+            deadline = time.monotonic() + timeout
         with pv._in_use:
             pv._usages += 1
             # If needed, reconnect. Do this inside the lock so that we don't
             # try to do this twice. (No other threads that need this lock
             # can proceed until the connection is ready anyway!)
             if pv._idle:
-                pv.context.reconnect(((pv.name, pv.priority),))
+                # The Context should have been maintaining a working circuit
+                # for us while this was idle. We just need to re-create the
+                # Channel.
+                ready = pv.circuit_ready.wait(timeout=timeout)
+                if not ready:
+                    raise TimeoutError(f"Could not connect within "
+                                       f"{raw_timeout}-second timeout.")
+                with pv._component_lock:
+                    cm = pv.circuit_manager
+                    cid = cm.circuit.new_channel_id()
+                    chan = ca.ClientChannel(pv.name, cm.circuit, cid=cid)
+                    cm.channels[cid] = chan
+                    cm.pvs[cid] = pv
+                    pv.circuit_manager.send(chan.create())
         try:
-            timeout = raw_timeout
             for i in range(CIRCUIT_DEATH_ATTEMPTS):
                 # On each iteration, subtract the time we already spent on any
                 # previous attempts.
@@ -1257,6 +1269,7 @@ class PV:
             # connection. The next thread to acquire the lock will re-connect
             # after it acquires the lock.
             try:
+                self.channel_ready.clear()
                 self.circuit_manager.send(self.channel.disconnect())
             except OSError:
                 # the socket is dead-dead, do nothing
