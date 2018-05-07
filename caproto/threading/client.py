@@ -61,34 +61,48 @@ def master_lock(func):
 
 def ensure_connected(func):
     def inner(self, *args, **kwargs):
-        timeout = kwargs.get('timeout')
-        if timeout is not None:
-            deadline = time.monotonic() + timeout
-        with self._in_use:
-            self._usages += 1
+        if isinstance(self, PV):
+            pv = self
+        elif isinstance(self, Subscription):
+            pv = self.pv
+        else:
+            raise TypeError("ensure_connected is intended to decorate methods "
+                            "of PV and Subscription.")
+        # This `2` matches the default in read, write, wait_for_connection.
+        raw_timeout = kwargs.get('timeout', 2)
+        if raw_timeout is not None:
+            deadline = time.monotonic() + raw_timeout
+        with pv._in_use:
+            pv._usages += 1
             # If needed, reconnect. Do this inside the lock so that we don't
             # try to do this twice. (No other threads that need this lock
             # can proceed until the connection is ready anyway!)
-            if self._idle:
-                self.context.reconnect(((self.name, self.priority),))
+            if pv._idle:
+                pv.context.reconnect(((pv.name, pv.priority),))
         try:
-            for _ in range(CIRCUIT_DEATH_ATTEMPTS):
+            timeout = raw_timeout
+            for i in range(CIRCUIT_DEATH_ATTEMPTS):
                 # On each iteration, subtract the time we already spent on any
                 # previous attempts.
                 if timeout is not None:
                     timeout = deadline - time.monotonic()
-                self.channel_ready.wait(timeout=timeout)
+                ready = pv.channel_ready.wait(timeout=timeout)
+                if not ready:
+                    raise TimeoutError(f"Could not connect within "
+                                       f"{raw_timeout}-second timeout.")
                 if timeout is not None:
                     timeout = deadline - time.monotonic()
                     kwargs['timeout'] = timeout
-                with self._component_lock:
-                    cm = self.circuit_manager
+                with pv._component_lock:
+                    cm = pv.circuit_manager
                     try:
                         return func(self, *args, **kwargs)
                     except DeadCircuitError:
                         # Something in func tried operate on the circuit after
                         # it died. The context will automatically build us a
                         # new circuit. Try again.
+                        logger.debug('Caught DeadCircuitError. '
+                                     'Retrying {func.__name__}.')
                         continue
                     except TimeoutError:
                         # The circuit may have died after func was done calling
@@ -96,15 +110,18 @@ def ensure_connected(func):
                         # were expecting. The context will automatically build
                         # us a new circuit. Try again.
                         if cm.dead.is_set():
+                            logger.debug('Caught TimeoutError due to dead '
+                                         'circuit. '
+                                         'Retrying {func.__name__}.')
                             continue
                         # The circuit is fine -- this is a real error.
                         raise
                 raise
 
         finally:
-            with self._in_use:
-                self._usages -= 1
-                self._in_use.notify_all()
+            with pv._in_use:
+                pv._usages -= 1
+                pv._in_use.notify_all()
         return result
     return inner
 
@@ -721,7 +738,6 @@ class Context:
         # Receive (address, (name1, name2, ...)). The sending side of this
         # queue is held by SharedBroadcaster.command_loop.
         while not self._close_event.is_set():
-            print('_process')
             try:
                 address, names = self._search_results_queue.get(timeout=0.5)
             except Empty:
@@ -748,7 +764,6 @@ class Context:
                     cm = self.get_circuit_manager(address, pv.priority)
                     circuit = cm.circuit
 
-                    print('i wanna set your cm')
                     pv.circuit_manager = cm
                     # TODO: NOTE: we are not following the suggestion to
                     # use the same cid as in the search. This simplifies
@@ -876,7 +891,7 @@ class VirtualCircuitManager:
     __slots__ = ('context', 'circuit', 'channels', 'ioids', '_ioid_counter',
                  'subscriptions', '_user_disconnected', 'new_command_cond',
                  'socket', 'selector', 'pvs', 'all_created_pvnames',
-                 '_torn_down', 'process_queue', 'processing', 'master_lock',
+                 'dead', 'process_queue', 'processing', 'master_lock',
                  '__weakref__')
 
     def __init__(self, context, circuit, selector, timeout=TIMEOUT):
@@ -924,10 +939,6 @@ class VirtualCircuitManager:
     @property
     def connected(self):
         return self.circuit.states[ca.CLIENT] is ca.CONNECTED
-
-    @property
-    def dead(self):
-        return self.socket is None
 
     def _socket_send(self, buffers_to_send):
         'Send a list of buffers over the socket'
@@ -1053,7 +1064,7 @@ class VirtualCircuitManager:
             pv.channel_ready.clear()
             pv.circuit_ready.clear()
         self.dead.set()
-        for ioid_info in self.ioids:
+        for ioid_info in self.ioids.values():
             # Un-block any calls to PV.read() or PV.write() that are waiting on
             # responses that we now know will never arrive. They will check on
             # circuit health and raise appropriately.
@@ -1301,7 +1312,7 @@ class PV:
             self._idle = True
 
     @ensure_connected
-    def read(self, wait=True, callback=None, timeout=2, data_type=None,
+    def read(self, *, wait=True, callback=None, timeout=2, data_type=None,
              data_count=None):
         """Request a fresh reading.
 
@@ -1329,11 +1340,6 @@ class PV:
             count, which can be checked in the Channel's attribute
             :attr:`native_data_count`.
         """
-        # need this lock because the socket thread could be trying to
-        # update this channel due to an incoming message
-        if not self.connected:
-            raise DisconnectedError()
-
         ioid = self.circuit_manager._ioid_counter()
         command = self.channel.read(ioid=ioid,
                                     data_type=data_type,
@@ -1349,16 +1355,17 @@ class PV:
 
         deadline = time.monotonic() + timeout if timeout is not None else None
         ioid_info['deadline'] = deadline
-        # TODO: circuit_manager can be removed from underneath us here
         self.circuit_manager.send(command)
 
         # The circuit_manager will put a reference to the response into
         # ioid_info and then set event.
         if not event.wait(timeout=timeout):
             if self.circuit_manager.dead.is_set():
-                # This is caught be @ensure_connected, which will retry the
-                # function call a couple times in hopes of getting a working
-                # circuit.
+                # This circuit has died sometime during this function call.
+                # The exception raised here will be caught by
+                # @ensure_connected, which will retry the function call a
+                # in hopes of getting a working circuit until our `timeout` has
+                # been used up.
                 raise DeadCircuitError()
             raise TimeoutError(
                 f"Server at {self.circuit_manager.circuit.address} did "
@@ -1369,8 +1376,8 @@ class PV:
         return ioid_info['response']
 
     @ensure_connected
-    def write(self, data, wait=True, callback=None, timeout=2, use_notify=None,
-              data_type=None, data_count=None):
+    def write(self, data, *, wait=True, callback=None, timeout=2,
+              use_notify=None, data_type=None, data_count=None):
         """
         Write a new value. Optionally, request confirmation from the server.
 
@@ -1439,6 +1446,13 @@ class PV:
         # The circuit_manager will put a reference to the response into
         # ioid_info and then set event.
         if not event.wait(timeout=timeout):
+            if self.circuit_manager.dead.is_set():
+                # This circuit has died sometime during this function call.
+                # The exception raised here will be caught by
+                # @ensure_connected, which will retry the function call a
+                # in hopes of getting a working circuit until our `timeout` has
+                # been used up.
+                raise DeadCircuitError()
             raise TimeoutError(
                 f"Server at {self.circuit_manager.circuit.address} did "
                 f"not respond to attempt to write to channel named "
@@ -1541,12 +1555,10 @@ class Subscription(CallbackHandler):
     def __repr__(self):
         return f"<Subscription to {self.pv.name!r}, id={self.subscriptionid}>"
 
-    @master_lock
-    def _subscribe(self):
+    @ensure_connected
+    def _subscribe(self, timeout=2):
         """This is called automatically after the first callback is added.
         """
-        # some contorions employed to reuse the ensure_connected decorator here
-        ensure_connected(lambda self: None)(self.pv)
         with self._callback_lock:
             command = self.compose_command()  # None if there are no callbacks
         has_callbacks = command is not None
