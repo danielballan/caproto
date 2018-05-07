@@ -43,22 +43,6 @@ class DeadCircuitError(CaprotoError):
     ...
 
 
-def master_lock(func):
-    """
-    Apply to a lock during an instance method's execution.
-
-    This expects the instance to have an attribute named `master_lock`.
-    """
-    counter = itertools.count()
-
-    def inner(self, *args, **kwargs):
-        next(counter)
-        with self.master_lock:
-            ret = func(self, *args, **kwargs)
-            return ret
-    return inner
-
-
 def ensure_connected(func):
     def inner(self, *args, **kwargs):
         if isinstance(self, PV):
@@ -122,7 +106,6 @@ def ensure_connected(func):
             with pv._in_use:
                 pv._usages -= 1
                 pv._in_use.notify_all()
-        return result
     return inner
 
 
@@ -634,7 +617,6 @@ class Context:
         self.client_name = client_name
         self.log_level = log_level
         self.pv_cache_lock = threading.RLock()
-        self.master_lock = threading.RLock()
         self.resuscitated_pvs = []
         self.circuit_managers = {}  # keyed on address
         self.pvs = {}  # (name, priority) -> pv
@@ -800,47 +782,46 @@ class Context:
 
     def _restart_subscriptions(self):
         while not self._close_event.is_set():
-            with self.master_lock:
-                t = time.monotonic()
-                ready = defaultdict(list)
-                with self.pv_cache_lock:
-                    pvs = list(self.resuscitated_pvs)
-                    self.resuscitated_pvs.clear()
+            t = time.monotonic()
+            ready = defaultdict(list)
+            with self.pv_cache_lock:
+                pvs = list(self.resuscitated_pvs)
+                self.resuscitated_pvs.clear()
+                for pv in pvs:
+                    if pv.connected:
+                        ready[pv.circuit_manager].append(pv)
+                    else:
+                        self.resuscitated_pvs.append(pv)
+
+            for cm, pvs in ready.items():
+                def requests():
+                    "Yield EventAddRequest commands."
                     for pv in pvs:
-                        if pv.connected:
-                            ready[pv.circuit_manager].append(pv)
-                        else:
-                            self.resuscitated_pvs.append(pv)
+                        subs = pv.subscriptions
+                        cm_subs_cache = pv.circuit_manager.subscriptions
+                        for sub in list(subs.values()):
+                            # the old subscription is dead, remove it
+                            if sub.subscriptionid is not None:
+                                cm_subs_cache.pop(sub.subscriptionid, None)
+                            # this will add the subscription into our self.subscriptions
+                            command = sub.compose_command()
+                            # compose_command() returns None if this
+                            # Subscription is inactive (meaning there are no
+                            # user callbacks attached). It will send an
+                            # EventAddRequest on its own if/when the user does
+                            # add any callbacks, so we can skip it here.
+                            if command is not None:
+                                yield command
 
-                for cm, pvs in ready.items():
-                    def requests():
-                        "Yield EventAddRequest commands."
-                        for pv in pvs:
-                            subs = pv.subscriptions
-                            cm_subs_cache = pv.circuit_manager.subscriptions
-                            for sub in list(subs.values()):
-                                # the old subscription is dead, remove it
-                                if sub.subscriptionid is not None:
-                                    cm_subs_cache.pop(sub.subscriptionid, None)
-                                # this will add the subscription into our self.subscriptions
-                                command = sub.compose_command()
-                                # compose_command() returns None if this
-                                # Subscription is inactive (meaning there are no
-                                # user callbacks attached). It will send an
-                                # EventAddRequest on its own if/when the user does
-                                # add any callbacks, so we can skip it here.
-                                if command is not None:
-                                    yield command
+                for batch in batch_requests(requests(),
+                                            EVENT_ADD_BATCH_MAX_BYTES):
+                    cm.send(*batch)
 
-                    for batch in batch_requests(requests(),
-                                                EVENT_ADD_BATCH_MAX_BYTES):
-                        cm.send(*batch)
+            wait_time = max(0, (RESTART_SUBS_PERIOD -
+                                (time.monotonic() - t)))
+            self._close_event.wait(wait_time)
 
-                wait_time = max(0, (RESTART_SUBS_PERIOD -
-                                    (time.monotonic() - t)))
-                self._close_event.wait(wait_time)
-
-        logger.debug('Restart subscriptions thread exiting')
+    logger.debug('Restart subscriptions thread exiting')
 
     def disconnect(self, *, wait=True, timeout=2):
         self._user_disconnected = True
@@ -891,7 +872,7 @@ class VirtualCircuitManager:
     __slots__ = ('context', 'circuit', 'channels', 'ioids', '_ioid_counter',
                  'subscriptions', '_user_disconnected', 'new_command_cond',
                  'socket', 'selector', 'pvs', 'all_created_pvnames',
-                 'dead', 'process_queue', 'processing', 'master_lock',
+                 'dead', 'process_queue', 'processing',
                  '__weakref__')
 
     def __init__(self, context, circuit, selector, timeout=TIMEOUT):
@@ -905,7 +886,6 @@ class VirtualCircuitManager:
         self.socket = None
         self.selector = selector
         self._user_disconnected = False
-        self.master_lock = threading.RLock()
         # keep track of all PV names that are successfully connected to within
         # this circuit. This is to be cleared upon disconnection:
         self.all_created_pvnames = []
@@ -1050,7 +1030,6 @@ class VirtualCircuitManager:
                 logger.debug('other command %s', command)
             self.new_command_cond.notify_all()
 
-    @master_lock
     def _disconnected(self):
         # Ensure that this method is idempotent.
         if self.dead.is_set():
@@ -1095,7 +1074,6 @@ class VirtualCircuitManager:
             self.context.reconnect(((chan.name, chan.circuit.priority)
                                     for chan in self.channels.values()))
 
-    @master_lock
     def disconnect(self, *, wait=True, timeout=2.0):
         self._user_disconnected = True
         self._disconnected()
@@ -1139,7 +1117,7 @@ class PV:
                  'circuit_ready', 'channel_ready',
                  'access_rights_callback', 'subscriptions',
                  'command_bundle_queue', '_component_lock', '_idle', '_in_use',
-                 '_usages', 'connection_state_callback', 'master_lock',
+                 '_usages', 'connection_state_callback',
                  '__weakref__')
 
     def __init__(self, name, priority, context, connection_state_callback,
@@ -1147,7 +1125,6 @@ class PV:
         """
         These must be instantiated by a Context, never directly.
         """
-        self.master_lock = threading.RLock()
         self.name = name
         self.priority = priority
         self.context = context
@@ -1175,8 +1152,7 @@ class PV:
 
     @property
     def circuit_manager(self):
-        with self._component_lock:
-            return self._circuit_manager
+        return self._circuit_manager
 
     @circuit_manager.setter
     def circuit_manager(self, val):
@@ -1185,8 +1161,7 @@ class PV:
 
     @property
     def channel(self):
-        with self._component_lock:
-            return self._channel
+        return self._channel
 
     @channel.setter
     def channel(self, val):
@@ -1204,7 +1179,6 @@ class PV:
 
         self.connection_state_callback.process(self, state)
 
-    @master_lock
     def __repr__(self):
         if self._idle:
             state = "(idle)"
@@ -1273,7 +1247,6 @@ class PV:
                     f"{self.name!r} within {timeout}-second timeout."
                 )
 
-    @master_lock
     def go_idle(self):
         """Request to clear this Channel to reduce load on client and server.
 
@@ -1461,7 +1434,6 @@ class PV:
             )
         return ioid_info['response']
 
-    @master_lock
     def subscribe(self, *args, **kwargs):
         "Start a new subscription to which user callback may be added."
         # A Subscription is uniquely identified by the Signature created by its
@@ -1476,7 +1448,6 @@ class PV:
         # callbacks via sub.add_callback(user_func).
         return sub
 
-    @master_lock
     def unsubscribe_all(self):
         for sub in self.subscriptions.values():
             sub.clear()
@@ -1492,9 +1463,7 @@ class CallbackHandler:
         self.pv = pv
         self._callback_id = 0
         self._callback_lock = threading.RLock()
-        self.master_lock = threading.RLock()
 
-    @master_lock
     def add_callback(self, func):
         # TODO thread safety
         cb_id = self._callback_id
@@ -1513,12 +1482,10 @@ class CallbackHandler:
             self.callbacks[cb_id] = ref
         return cb_id
 
-    @master_lock
     def remove_callback(self, cb_id):
         with self._callback_lock:
             self.callbacks.pop(cb_id, None)
 
-    @master_lock
     def process(self, *args, **kwargs):
         """
         This is a fast operation that submits jobs to the Context's
@@ -1566,7 +1533,6 @@ class Subscription(CallbackHandler):
             self.pv.circuit_manager.send(command)
         return has_callbacks
 
-    @master_lock
     def compose_command(self):
         "This is used by the Context to re-subscribe in bulk after dropping."
         with self._callback_lock:
@@ -1581,7 +1547,6 @@ class Subscription(CallbackHandler):
         self.pv.circuit_manager.subscriptions[subscriptionid] = self
         return command
 
-    @master_lock
     def clear(self):
         """
         Remove all callbacks.
@@ -1592,7 +1557,6 @@ class Subscription(CallbackHandler):
         # Once self.callbacks is empty, self.remove_callback calls
         # self._unsubscribe for us.
 
-    @master_lock
     def _unsubscribe(self):
         """
         This is automatically called if the number of callbacks goes to 0.
@@ -1614,7 +1578,6 @@ class Subscription(CallbackHandler):
             else:
                 self.pv.circuit_manager.send(command)
 
-    @master_lock
     def process(self, *args, **kwargs):
         # TODO here i think we can decouple PV update rates and callback
         # handling rates, if desirable, to not bog down performance.
@@ -1624,7 +1587,6 @@ class Subscription(CallbackHandler):
         super().process(*args, **kwargs)
         self.most_recent_response = (args, kwargs)
 
-    @master_lock
     def add_callback(self, func):
         cb_id = super().add_callback(func)
         with self._callback_lock:
@@ -1647,7 +1609,6 @@ class Subscription(CallbackHandler):
 
         return cb_id
 
-    @master_lock
     def remove_callback(self, cb_id):
         with self._callback_lock:
             super().remove_callback(cb_id)
