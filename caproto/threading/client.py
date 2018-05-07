@@ -873,7 +873,7 @@ class VirtualCircuitManager:
                  'subscriptions', '_user_disconnected', 'new_command_cond',
                  'socket', 'selector', 'pvs', 'all_created_pvnames',
                  'dead', 'process_queue', 'processing',
-                 '__weakref__')
+                 '_subscriptionid_counter', '__weakref__')
 
     def __init__(self, context, circuit, selector, timeout=TIMEOUT):
         self.context = context
@@ -891,6 +891,7 @@ class VirtualCircuitManager:
         self.all_created_pvnames = []
         self.dead = threading.Event()
         self._ioid_counter = ThreadsafeCounter()
+        self._subscriptionid_counter = ThreadsafeCounter()
 
         # Connect.
         with self.new_command_cond:
@@ -1510,12 +1511,16 @@ class Subscription(CallbackHandler):
             self.pv.circuit_manager.send(command)
         return has_callbacks
 
-    def compose_command(self):
+    @ensure_connected
+    def compose_command(self, timeout=2):
         "This is used by the Context to re-subscribe in bulk after dropping."
         with self._callback_lock:
             if not self.callbacks:
                 return None
+            subscriptionid = self.pv.circuit_manager._subscriptionid_counter()
+            print('compose_command', subscriptionid)
             command = self.pv.channel.subscribe(*self.sub_args,
+                                                subscriptionid=subscriptionid,
                                                 **self.sub_kwargs)
             subscriptionid = command.subscriptionid
             self.subscriptionid = subscriptionid
