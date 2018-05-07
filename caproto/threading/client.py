@@ -704,10 +704,6 @@ class Context:
         for key in keys:
             with self.pv_cache_lock:
                 pv = self.pvs[key]
-            pv.channel_ready.clear()
-            pv.circuit_ready.clear()
-            pv.circuit_manager = None
-            pv.channel = None
             pvs.append(pv)
             name, _ = key
             names.append(name)
@@ -725,6 +721,7 @@ class Context:
         # Receive (address, (name1, name2, ...)). The sending side of this
         # queue is held by SharedBroadcaster.command_loop.
         while not self._close_event.is_set():
+            print('_process')
             try:
                 address, names = self._search_results_queue.get(timeout=0.5)
             except Empty:
@@ -751,6 +748,7 @@ class Context:
                     cm = self.get_circuit_manager(address, pv.priority)
                     circuit = cm.circuit
 
+                    print('i wanna set your cm')
                     pv.circuit_manager = cm
                     # TODO: NOTE: we are not following the suggestion to
                     # use the same cid as in the search. This simplifies
@@ -1051,6 +1049,9 @@ class VirtualCircuitManager:
         # Update circuit state. This will be reflected on all PVs, which
         # continue to hold a reference to this disconnected circuit.
         self.circuit.disconnect()
+        for pv in self.pvs.values():
+            pv.channel_ready.clear()
+            pv.circuit_ready.clear()
         self.dead.set()
         for ioid_info in self.ioids:
             # Un-block any calls to PV.read() or PV.write() that are waiting on
@@ -1124,6 +1125,7 @@ class VirtualCircuitManager:
 class PV:
     """Wraps a VirtualCircuit and a caproto.ClientChannel."""
     __slots__ = ('name', 'priority', 'context', '_circuit_manager', '_channel',
+                 'circuit_ready', 'channel_ready',
                  'access_rights_callback', 'subscriptions',
                  'command_bundle_queue', '_component_lock', '_idle', '_in_use',
                  '_usages', 'connection_state_callback', 'master_lock',
@@ -1141,7 +1143,7 @@ class PV:
         # Use this lock whenever we touch circuit_manager or channel.
         self._component_lock = threading.RLock()
         self.circuit_ready = threading.Event()
-        self.channel_read = threading.Event()
+        self.channel_ready = threading.Event()
         self.connection_state_callback = CallbackHandler(self)
         self.access_rights_callback = CallbackHandler(self)
 
