@@ -619,6 +619,7 @@ class Context:
         self.pv_cache_lock = threading.RLock()
         self.resuscitated_pvs = []
         self.circuit_managers = {}  # keyed on address
+        self._lock_during_get_circuit_manager = threading.RLock()
         self.pvs = {}  # (name, priority) -> pv
         # name -> set of pvs  --- with varied priority
         self.pvs_needing_circuits = defaultdict(set)
@@ -771,14 +772,16 @@ class Context:
 
         Make a new one if necessary.
         """
-        cm = self.circuit_managers.get((address, priority), None)
-        if cm is None or cm.dead:
-            circuit = ca.VirtualCircuit(our_role=ca.CLIENT, address=address,
-                                        priority=priority)
-            cm = VirtualCircuitManager(self, circuit, self.selector)
-            cm.circuit.log.setLevel(self.log_level)
-            self.circuit_managers[(address, priority)] = cm
-        return cm
+        with self._lock_during_get_circuit_manager:
+            cm = self.circuit_managers.get((address, priority), None)
+            if cm is None or cm.dead.is_set():
+                circuit = ca.VirtualCircuit(our_role=ca.CLIENT,
+                                            address=address,
+                                            priority=priority)
+                cm = VirtualCircuitManager(self, circuit, self.selector)
+                cm.circuit.log.setLevel(self.log_level)
+                self.circuit_managers[(address, priority)] = cm
+            return cm
 
     def _restart_subscriptions(self):
         while not self._close_event.is_set():
@@ -966,7 +969,6 @@ class VirtualCircuitManager:
                              'state %s', command, self, self.circuit.states,
                              exc_info=ex)
                 # circuit exceptions are fatal; exit the loop
-                print("CIRCUIT EXCEPTION IS FATAL")
                 self.disconnect()
                 return
 
@@ -1109,7 +1111,6 @@ class VirtualCircuitManager:
             logger.debug('Circuit manager disconnected')
 
     def __del__(self):
-        print('__del__ circuit manager', id(self))
         try:
             self.disconnect()
         except AttributeError:
@@ -1518,7 +1519,6 @@ class Subscription(CallbackHandler):
             if not self.callbacks:
                 return None
             subscriptionid = self.pv.circuit_manager._subscriptionid_counter()
-            print('compose_command', subscriptionid)
             command = self.pv.channel.subscribe(*self.sub_args,
                                                 subscriptionid=subscriptionid,
                                                 **self.sub_kwargs)

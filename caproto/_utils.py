@@ -572,7 +572,7 @@ class ThreadsafeCounter:
 
     def __init__(self, *, initial_value=0, dont_clash_with=None):
         self.value = initial_value
-        self.lock = threading.RLock()
+        self.lock = threading.Lock()
         self.dont_clash_with = dont_clash_with
 
     def __call__(self):
