@@ -965,6 +965,7 @@ class VirtualCircuitManager:
                              'state %s', command, self, self.circuit.states,
                              exc_info=ex)
                 # circuit exceptions are fatal; exit the loop
+                print("CIRCUIT EXCEPTION IS FATAL")
                 self.disconnect()
                 return
 
@@ -1035,7 +1036,7 @@ class VirtualCircuitManager:
         # Ensure that this method is idempotent.
         if self.dead.is_set():
             return
-        print("DISCONNECTED")
+        print("_disconnected")
         logger.debug('Entered VCM._disconnected')
         # Update circuit state. This will be reflected on all PVs, which
         # continue to hold a reference to this disconnected circuit.
@@ -1076,6 +1077,7 @@ class VirtualCircuitManager:
                                     for chan in self.channels.values()))
 
     def disconnect(self, *, wait=True, timeout=2.0):
+        print('user disconnected')
         self._user_disconnected = True
         self._disconnected()
         if self.socket is None:
@@ -1106,6 +1108,7 @@ class VirtualCircuitManager:
             logger.debug('Circuit manager disconnected')
 
     def __del__(self):
+        print('__del__ circuit manager', id(self))
         try:
             self.disconnect()
         except AttributeError:
@@ -1241,10 +1244,9 @@ class PV:
         for sub in self.subscriptions.values():
             if sub.callbacks:
                 return
-        if not self.channel_ready.is_set():
-            return
-
         with self._in_use:
+            if not self.channel_ready.is_set():
+                return
             # Wait until no other methods that employ @self.ensure_connected
             # are in process.
             self._in_use.wait_for(lambda: self._usages == 0)
@@ -1252,10 +1254,6 @@ class PV:
             # self._in_use Condition's lock, so we can safely close the
             # connection. The next thread to acquire the lock will re-connect
             # after it acquires the lock.
-            with self.circuit_manager.new_command_cond:
-                if not self.connected:
-                    return
-
             try:
                 self.circuit_manager.send(self.channel.disconnect())
             except OSError:
