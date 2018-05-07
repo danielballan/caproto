@@ -1020,6 +1020,7 @@ class VirtualCircuitManager:
                 chan = self.channels[command.cid]
                 pv.connection_state_changed('connected', chan)
                 self.all_created_pvnames.append(pv.name)
+                pv.channel = chan
                 pv.channel_ready.set()
             elif isinstance(command, (ca.ServerDisconnResponse,
                                       ca.ClearChannelResponse)):
@@ -1222,30 +1223,7 @@ class PV:
 
     @ensure_connected
     def wait_for_connection(self, *, timeout=2):
-        self._wait_for_connection(timeout=timeout)
-
-    def _wait_for_connection(self, *, timeout=2):
-        """
-        Wait for this PV to be connected, ready to use.
-
-        Parameters
-        ----------
-        timeout : float
-            Seconds before a TimeoutError is raised. Default is 2.
-        """
-        if self.circuit_manager is None:
-            self.wait_for_search(timeout=timeout)
-        with self.circuit_manager.new_command_cond:
-            if self.connected:
-                return
-            done = self.circuit_manager.new_command_cond.wait_for(
-                lambda: self.connected, timeout)
-        if not done:
-                raise TimeoutError(
-                    f"Server at {self.circuit_manager.circuit.address} did "
-                    f"not respond to attempt to create channel named "
-                    f"{self.name!r} within {timeout}-second timeout."
-                )
+        pass
 
     def go_idle(self):
         """Request to clear this Channel to reduce load on client and server.
