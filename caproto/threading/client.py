@@ -1233,14 +1233,15 @@ class PV:
         in exchange for making the next request a bit slower, as it has to
         redo the handshake with the server first.
 
-        If there are any active subscriptions, this request will be ignored. If
-        the PV is in the process of connecting, this request will be ignored.
-        If there are any actions in progress (read, write) this request will be
-        processed when they are complete.
+        If there are any subscriptions with callbacks, this request will be
+        ignored. If the PV is in the process of connecting, this request will
+        be ignored.  If there are any actions in progress (read, write) this
+        request will be processed when they are complete.
         """
-        if self.subscriptions:
-            return
-        if not self.circuit_manager:
+        for sub in self.subscriptions.values():
+            if sub.callbacks:
+                return
+        if not self.channel_ready.is_set():
             return
 
         with self._in_use:
