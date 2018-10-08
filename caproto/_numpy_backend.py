@@ -1,4 +1,5 @@
 import ctypes
+import os
 from ._backend import Backend, register_backend
 from ._dbr import (ChannelType, DbrStringArray, native_types, DBR_TYPES)
 
@@ -29,6 +30,8 @@ if np is not None:
                 for ch_type, dtype in type_map.items()
                 }
 
+STR_ENC = os.environ.get('CAPROTO_STRING_ENCODING', 'latin-1')
+
 
 def epics_to_python(value, native_type, data_count, *, auto_byteswap=True):
     '''Convert from a native EPICS DBR type to a builtin Python type
@@ -49,13 +52,17 @@ def epics_to_python(value, native_type, data_count, *, auto_byteswap=True):
     return np.frombuffer(value, dtype=dt)
 
 
-def python_to_epics(dtype, values, *, byteswap=True, convert_from=None):
+def python_to_epics(dtype, values, *, byteswap=True, convert_from=None,
+                    data_count=None):
     'Convert python builtin values to epics CA'
     # NOTE: ignoring byteswap, storing everything as big-endian
     if dtype == ChannelType.STRING:
-        return DbrStringArray(values).tobytes()
-
-    return np.asarray(values).astype(type_map[dtype])
+        if isinstance(values, (str, bytes)):
+            values = [values]
+        if isinstance(values[0], str):
+            values = [item.encode(STR_ENC) for item in values]
+        return data_count or len(values), DbrStringArray(values).tobytes() 
+    return data_count or len(values), np.asarray(values).astype(type_map[dtype])
 
 
 def _setup():

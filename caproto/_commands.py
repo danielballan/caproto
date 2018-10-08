@@ -240,34 +240,34 @@ def data_payload(data, metadata, data_type, data_count):
         is ``numpy.ndarray`` or any other iterable, we ensure big-endianness.
     metadata : a DBR struct, any iterable, or bytes
     data_type : integer
-    data_count : integer
+    data_count : integer or None
 
     Returns
     -------
     size, md_payload, data_payload[, pad_payload]
         pad_payload will only be returned if needed
     """
-
     # Make the data payload.
     if isinstance(data, bytes):
         # Assume bytes are big-endian; we have no way of checking.
         data_payload = data
-    elif (isinstance(data, backend.array_types) or
-          isinstance(data, collections.Iterable)):
-        data_payload = backend.python_to_epics(
-            native_type(data_type), data, byteswap=True)
+        if data_count is None:
+            raise ValueError("data_count is None, and we cannot infer the "
+                             "data_count when type(data) is bytes.")
     elif data is None:
         data_payload = b''
+        if data_count is None:
+            data_count = 0
     else:
-        raise CaprotoTypeError("data given as type we cannot handle - {}"
-                               "".format(type(data)))
+        data_payload, data_count = backend.python_to_epics(
+            native_type(data_type), data, data_count=data_count, byteswap=True)
 
     md_payload = parse_metadata(metadata, data_type)
     size, pad_payload = pad_buffers(md_payload, data_payload)
     if pad_payload:
-        return size, md_payload, data_payload, pad_payload
+        return size, data_count, md_payload, data_payload, pad_payload
     else:
-        return size, md_payload, data_payload
+        return size, data_count, md_payload, data_payload
 
 
 def extract_data(buffer, data_type, data_count):
@@ -964,7 +964,8 @@ class EventAddResponse(Message):
 
     def __init__(self, data, data_type, data_count,
                  status, subscriptionid, *, metadata=None):
-        size, *buffers = data_payload(data, metadata, data_type, data_count)
+        size, data_count, *buffers = data_payload(data, metadata, data_type,
+                                                  data_count)
         status = ensure_eca_value(status)
         header = EventAddResponseHeader(size, data_type, data_count,
                                         status, subscriptionid)
@@ -1113,7 +1114,8 @@ class ReadResponse(Message):
         warnings.warn("ReadResponse was deprecated by ChannelAccess in 3.13, "
                       "and is not well-supported by caproto. Serialization "
                       "may not be correct.")
-        size, *buffers = data_payload(data, metadata, data_type, data_count)
+        size, data_count, *buffers = data_payload(data, metadata, data_type,
+                                                  data_count)
         header = ReadResponseHeader(size, data_type, data_count, sid, ioid)
         super().__init__(header, *buffers)
 
@@ -1140,7 +1142,8 @@ class WriteRequest(Message):
 
     def __init__(self, data, data_type, data_count, sid, ioid, *,
                  metadata=None):
-        size, *buffers = data_payload(data, metadata, data_type, data_count)
+        size, data_count,*buffers = data_payload(data, metadata, data_type,
+                                                 data_count)
         header = WriteRequestHeader(size, data_type, data_count, sid, ioid)
         super().__init__(header, *buffers)
 
@@ -1376,7 +1379,8 @@ class ReadNotifyResponse(Message):
 
     def __init__(self, data, data_type, data_count, status, ioid, *,
                  metadata=None):
-        size, *buffers = data_payload(data, metadata, data_type, data_count)
+        size, data_count, *buffers = data_payload(data, metadata, data_type,
+                                                  data_count)
         status = ensure_eca_value(status)
         header = ReadNotifyResponseHeader(size, data_type, data_count, status,
                                           ioid)
@@ -1524,7 +1528,8 @@ class WriteNotifyRequest(Message):
 
     def __init__(self, data, data_type, data_count, sid, ioid, *,
                  metadata=None):
-        size, *buffers = data_payload(data, metadata, data_type, data_count)
+        size, data_count, *buffers = data_payload(data, metadata, data_type,
+                                                  data_count)
         header = WriteNotifyRequestHeader(size, data_type, data_count, sid,
                                           ioid)
         super().__init__(header, *buffers)

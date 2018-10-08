@@ -648,7 +648,10 @@ class ClientChannel(_BaseChannel):
         """
         data_type, data_count = self._fill_defaults(data_type, data_count)
         if data_count == 0:
-            data_count = len(data)
+            try:
+                data_count = len(data)
+            except TypeError:
+                data_count = 1
         if ioid is None:
             ioid = self.circuit.new_ioid()
 
