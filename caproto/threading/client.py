@@ -152,6 +152,46 @@ RESTART_SUBS_PERIOD = 0.1
 STR_ENC = os.environ.get('CAPROTO_STRING_ENCODING', 'latin-1')
 
 
+class TCPSelectorThread:
+    def __init__(self, *, parent):
+        self._close_event = Event('selector/close_event')
+        weakref.finalize(parent, self.stop)
+        selector = selectors.DefaultSelector()
+        self.selector = selector
+
+        def loop():
+            while not self._close_event.is_set():
+                events = selector.select()
+                for key, mask in events:
+                    callback = key.data
+                    callback(key.fileobj, mask)
+
+        self.thread = threading.Thread(target=loop, daemon=True,
+                                       name='selector')
+
+        self.thread.start()
+
+    def stop(self):
+        self._close_event.set()
+
+    def add_socket(self, sock, target_obj):
+        sock.setblocking(False)
+
+        def read(conn, mask):
+            data = conn.recv(1000)  # Should be ready
+            if data:
+                target_obj.received(data)
+            else:
+                print('closing', conn)
+                self.selector.unregister(conn)
+                conn.close()
+
+        self.selector.register(sock, selectors.EVENT_READ, read)
+
+    def remove_socket(self, sock):
+        ...
+
+
 class SelectorThread:
     """
     This is used internally by the Context and the VirtualCircuitManager.
@@ -903,8 +943,7 @@ class Context:
             daemon=True, name='activate_subscriptions')
         self._activate_subscriptions_thread.start()
 
-        self.selector = SelectorThread(parent=self)
-        self.selector.start()
+        self.selector = TCPSelectorThread(parent=self)
         self._user_disconnected = False
 
     def __repr__(self):
@@ -1260,7 +1299,7 @@ class VirtualCircuitManager:
             # Send bytes over the wire using some caproto utilities.
             ca.send_all(buffers_to_send, self._socket_send)
 
-    def received(self, bytes_recv, address):
+    def received(self, bytes_recv):
         """Receive and process and next command from the virtual circuit.
 
         This will be run on the recv thread"""
