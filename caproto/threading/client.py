@@ -471,6 +471,9 @@ class SharedBroadcaster:
 
             # Clean up expired result.
             self.search_results.pop(name, None)
+            pv_name_logger = logging.getLogger(f'caproto.bcast.search.{name}')
+            pv_name_logger.debug(f'Clean up expired {name} search result')
+            self.search_log.debug(f'Clean up expired {name} search result')
             raise CaprotoKeyError(f'{name!r}: stale search result')
 
         return address
@@ -495,6 +498,7 @@ class SharedBroadcaster:
 
         new_id = self.new_id
         unanswered_searches = self.unanswered_searches
+        pv_name_logger = logging.getLogger(f'caproto.bcast.search.{name}')
 
         with self._search_lock:
             # We have have already searched for these names recently.
@@ -511,6 +515,8 @@ class SharedBroadcaster:
 
             for address, names in use_cached_search.items():
                 results_queue.put((address, names))
+                pv_name_logger.debug(f'Put ({address}, {names}) into results_queue for search')
+                self.search_log.debug(f'Put ({address}, {names}) into results_queue for search')
 
             # Generate search_ids and stash them on Context state so they can
             # be used to match SearchResponses with SearchRequests.
@@ -524,6 +530,8 @@ class SharedBroadcaster:
                 # The value is a list because we mutate it to update the
                 # retirement deadline sometimes.
                 unanswered_searches[search_id] = [name, results_queue, retirement_deadline]
+                pv_name_logger.debug(f'Generate search_id {search_id} of {name}')
+                self.search_log.debug(f'Generate search_id {search_id} of {name}')
         self._search_now.set()
 
     def cancel(self, *names):
@@ -551,6 +559,7 @@ class SharedBroadcaster:
         intervals automatically. This method is intended primarily for
         debugging and should not be needed in normal use.
         """
+        self.search_log.debug(f'Force the Broadcaster to reissue all unanswered search requests')
         self._search_now.set()
 
     def received(self, bytes_recv, address):
@@ -804,6 +813,7 @@ class SharedBroadcaster:
         # RETRY_RETIRED_SEARCHES_INTERVAL or, again, whenever new searches
         # are added.
         self.log.debug('Broadcaster search-retry thread has started.')
+        self.search_log.debug('Broadcaster search-retry thread has started.')
         time_to_check_on_retirees = time.monotonic() + RETRY_RETIRED_SEARCHES_INTERVAL
         interval = MIN_RETRY_SEARCHES_INTERVAL
         while not self._close_event.is_set():
@@ -859,6 +869,7 @@ class SharedBroadcaster:
             self._search_now.clear()
 
         self.log.debug('Broadcaster search-retry thread has exited.')
+        self.search_log.debug('Broadcaster search-retry thread has exited.')
 
     def __del__(self):
         try:
