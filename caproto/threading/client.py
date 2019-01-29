@@ -509,11 +509,8 @@ class SharedBroadcaster:
                 else:
                     use_cached_search[address].append(name)
 
-                pv_name_logger = logging.getLogger(f'caproto.bcast.search.{name}')
-                pv_name_logger.debug(f'Get address {address} of {name} from cached search result for search')
             for address, names in use_cached_search.items():
                 results_queue.put((address, names))
-                self.search_log.debug(f'Put ({address}, {names}) into results_queue for search')
 
             # Generate search_ids and stash them on Context state so they can
             # be used to match SearchResponses with SearchRequests.
@@ -527,8 +524,6 @@ class SharedBroadcaster:
                 # The value is a list because we mutate it to update the
                 # retirement deadline sometimes.
                 unanswered_searches[search_id] = [name, results_queue, retirement_deadline]
-                pv_name_logger = logging.getLogger(f'caproto.bcast.search.{name}')
-                pv_name_logger.debug(f'Generate search_id {search_id} of {name}')
         self._search_now.set()
 
     def cancel(self, *names):
@@ -556,7 +551,6 @@ class SharedBroadcaster:
         intervals automatically. This method is intended primarily for
         debugging and should not be needed in normal use.
         """
-        self.search_log.debug(f'Force the Broadcaster to reissue all unanswered search requests')
         self._search_now.set()
 
     def received(self, bytes_recv, address):
@@ -846,12 +840,14 @@ class SharedBroadcaster:
                 self.log.debug('Sending %d SearchRequests', len(items))
 
             version_req = ca.VersionRequest(0, ca.DEFAULT_PROTOCOL_VERSION)
+            self.search_log.debug(f'Start sending search request by batch')
             for batch in batch_requests(requests,
                                         SEARCH_MAX_DATAGRAM_BYTES - len(version_req)):
                 self.send(self.ca_server_port,
                           version_req,
                           *batch)
 
+            self.search_log.debug(f'End of sending search request')
             wait_time = max(0, interval - (time.monotonic() - t))
             # Double the interval for the next loop.
             interval = min(2 * interval, MAX_RETRY_SEARCHES_INTERVAL)
@@ -1064,6 +1060,8 @@ class Context:
             # and tracking circuit state, as well as a ClientChannel for
             # tracking channel state.
             for name in names:
+                pv_name_logger = logging.getLogger(f'caproto.bcast.search.{name}')
+                pv_name_logger.debug(f'Get {name} from search result queue')
                 # There could be multiple PVs with the same name and
                 # different priority. That is what we are looping over
                 # here. There could also be NO PVs with this name that need
