@@ -643,7 +643,8 @@ class SharedBroadcaster:
                                 accepted_address, _ = self.search_results[name]
                                 new_address = ca.extract_address(command)
                                 if new_address != accepted_address:
-                                    self.log.warning(
+                                    pv_name_logger = logging.getLogger(f'caproto.bcast.search.{name}')
+                                    pv_name_logger.warning(
                                         "PV %s with cid %d found on multiple "
                                         "servers. Accepted address is %s:%d. "
                                         "Also found on %s:%d",
@@ -654,7 +655,6 @@ class SharedBroadcaster:
                         queues[queue].append(name)
                         # Cache this to save time on future searches.
                         # (Entries expire after STALE_SEARCH_EXPIRATION.)
-                        self.log.debug('Found %s at %s:%d', name, *address)
                         search_results[name] = (address, now)
                         server_protocol_versions[address] = command.version
             # Send the search results to the Contexts that asked for
