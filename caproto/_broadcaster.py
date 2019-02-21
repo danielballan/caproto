@@ -8,7 +8,7 @@ from ._constants import (DEFAULT_PROTOCOL_VERSION, MAX_ID)
 from ._utils import (CLIENT, SERVER, CaprotoValueError,
                      RemoteProtocolError, ThreadsafeCounter)
 from ._state import get_exception
-from ._commands import (RepeaterConfirmResponse, RepeaterRegisterRequest,
+from ._commands import (Beacon, RepeaterConfirmResponse, RepeaterRegisterRequest,
                         SearchRequest, SearchResponse, VersionRequest,
                         read_datagram,
                         )
@@ -52,6 +52,7 @@ class Broadcaster:
             dont_clash_with=self.unanswered_searches,
         )
         self.log = logging.getLogger(f"caproto.bcast")
+        self.beacon_log = logging.getLogger(f'caproto.bcast.beacon')
 
     def send(self, *commands):
         """
@@ -70,11 +71,9 @@ class Broadcaster:
             bytes to send over a socket
         """
         bytes_to_send = b''
-        self.log.debug("Serializing %d commands into one datagram",
-                       len(commands))
         history = []
         for i, command in enumerate(commands):
-            self.log.debug("%d of %d %r", 1 + i, len(commands), command)
+            self.log.debug("Serializing %d of %d %r", 1 + i, len(commands), command)
             self._process_command(self.our_role, command, history=history)
             bytes_to_send += bytes(command)
         return bytes_to_send
@@ -97,8 +96,6 @@ class Broadcaster:
         -------
         commands : list
         """
-        self.log.debug("Received datagram from %s:%d with %d bytes.",
-                       *address, len(byteslike))
         try:
             commands = read_datagram(byteslike, address, self.their_role)
         except Exception as ex:
@@ -106,7 +103,10 @@ class Broadcaster:
                                       f' {ex.__class__.__name__} {ex}') from ex
 
         for command in commands:
-            self.log.debug("%d bytes -> %r", len(command), command)
+            if isinstance(command, Beacon):
+                self.beacon_log.debug("%s:%d (%dB) -> %r", *address, len(command), command)
+            else:
+                self.log.debug("%s:%d (%dB) -> %r", *address, len(command), command)
         return commands
 
     def process_commands(self, commands):

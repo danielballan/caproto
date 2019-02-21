@@ -183,7 +183,6 @@ class VirtualCircuit:
             commands.append(DISCONNECTED)
             return commands, 0
 
-        self.log.debug("Received %d bytes.", total_received)
         self._data += b''.join(buffers)
 
         while True:
@@ -192,7 +191,7 @@ class VirtualCircuit:
              num_bytes_needed) = read_from_bytestream(self._data,
                                                       self.their_role)
             if command is not NEED_DATA:
-                self.log.debug("%d bytes -> %r", len(command), command)
+                self.log.debug("Deserializing (%dB) -> %r", len(command), command)
                 commands.append(command)
             else:
                 # Less than a full command's worth of bytes are cached. Wait
