@@ -837,17 +837,15 @@ class SharedBroadcaster:
                 continue
 
             if items:
-                self.log.debug('Sending %d SearchRequests', len(items))
+                self.search_log.debug('Sending %d SearchRequests', len(items))
 
             version_req = ca.VersionRequest(0, ca.DEFAULT_PROTOCOL_VERSION)
-            self.search_log.debug(f'Start sending search request by batch')
             for batch in batch_requests(requests,
                                         SEARCH_MAX_DATAGRAM_BYTES - len(version_req)):
                 self.send(self.ca_server_port,
                           version_req,
                           *batch)
 
-            self.search_log.debug(f'End of sending search request')
             wait_time = max(0, interval - (time.monotonic() - t))
             # Double the interval for the next loop.
             interval = min(2 * interval, MAX_RETRY_SEARCHES_INTERVAL)
@@ -1061,7 +1059,7 @@ class Context:
             # tracking channel state.
             for name in names:
                 pv_name_logger = logging.getLogger(f'caproto.bcast.search.{name}')
-                pv_name_logger.debug(f'Get {name} from search result queue')
+                pv_name_logger.debug('Connecting %s on circuit with %s:%d', name, *address)
                 # There could be multiple PVs with the same name and
                 # different priority. That is what we are looping over
                 # here. There could also be NO PVs with this name that need
