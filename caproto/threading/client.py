@@ -910,6 +910,7 @@ class Context:
         self.max_workers = max_workers
         self.client_name = client_name
         self.log = logging.getLogger(f'caproto.ctx.{id(self)}')
+        self._pv_log_target = 'all'
         self.pv_cache_lock = threading.RLock()
         self.circuit_managers = {}  # keyed on ((host, port), priority)
         self._lock_during_get_circuit_manager = threading.RLock()
@@ -950,6 +951,14 @@ class Context:
 
     def __exit__(self, exc_type, exc_value, traceback):
         self.disconnect(wait=True)
+
+    @property
+    def pv_log_target(self):
+        return self._pv_log_target
+
+    @pv_log_target.setter
+    def pv_log_target(self, name):
+        self._pv_log_target = name
 
     def get_pvs(self, *names, priority=0, connection_state_callback=None,
                 access_rights_callback=None,
@@ -1083,6 +1092,7 @@ class Context:
                     cm.pvs[cid] = pv
                     channels_grouped_by_circuit[cm].append(chan)
                     pv.circuit_ready.set()
+                    pv.log.debug('Connecting %s on circuit with %s:%d', name, *address)
 
             # Initiate channel creation with the server.
             for cm, channels in channels_grouped_by_circuit.items():
@@ -1481,6 +1491,18 @@ class VirtualCircuitManager:
         except AttributeError:
             pass
 
+class CustomAdapter(logging.LoggerAdapter):
+    def process(self, msg, kwargs):
+        return '[pv: %s] %s' % (self.extra['pv'], msg), kwargs
+
+
+class MyFilter(logging.Filter):
+
+    def __init__(self, target_pv):
+        self.target_pv = target_pv
+
+    def filter(self, record):
+        return record.getMessage().split(' ')[1][:-1] == self.target_pv
 
 class PV:
     """
@@ -1510,7 +1532,10 @@ class PV:
         self.priority = priority
         self.context = context
         self.access_rights = None  # will be overwritten with AccessRights
-        self.log = logging.getLogger(f'caproto.ch.{name}.{priority}')
+        if self.context.pv_log_target == 'all':
+            self.log = logging.getLogger(f'caproto.ch.pv_name')
+        else:
+            self.log = self.getLogAdapter()
         # Use this lock whenever we touch circuit_manager or channel.
         self.component_lock = threading.RLock()
         self.circuit_ready = threading.Event()
@@ -1533,6 +1558,13 @@ class PV:
         self._idle = False
         self._in_use = threading.Condition()
         self._usages = 0
+
+    def getLogAdapter(self):
+        logger = logging.getLogger('caproto.pv_name')
+        f = MyFilter(self.context.pv_log_target)
+        logger.addFilter(f)
+        logger.setLevel('DEBUG')
+        return CustomAdapter(logger, {'pv': self.name})
 
     @property
     def timeout(self):
