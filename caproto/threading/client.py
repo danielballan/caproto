@@ -938,6 +938,7 @@ class Context:
         self.selector = SelectorThread(parent=self)
         self.selector.start()
         self._user_disconnected = False
+        self._preFilter = None
 
     def __repr__(self):
         return (f"<Context "
@@ -1561,8 +1562,10 @@ class PV:
 
     def getLogAdapter(self):
         logger = logging.getLogger('caproto.pv_name')
+        logger.removeFilter(self.context._preFilter)
         f = MyFilter(self.context.pv_log_target)
         logger.addFilter(f)
+        self.context._preFilter = f
         logger.setLevel('DEBUG')
         return CustomAdapter(logger, {'pv': self.name})
 
