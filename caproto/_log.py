@@ -170,6 +170,57 @@ class CaprotoAdapter(logging.LoggerAdapter):
         return msg, kwargs
 
 
+class PVFilter(logging.Filter):
+    '''
+    Pass through only messages relevant to one or more PV names and
+    pv-unrelated message.
+
+    Parameters
+    ----------
+    names : string or list of string
+        PV name or PV name list which will be filtted in.
+
+    Return
+    ------
+    Bool: True or False
+        True if message is not PV related which doesn't has 'pv' as key in extra
+        True if 'pv' as key exist and pv name exist in Filter list.
+        False if message is PV related but pv name isn't in Filter list.
+    '''
+    def __init__(self, names):
+        self.names = names
+    def filter(self, record):
+        if hasattr(record, 'pv'):
+            return record.pv in self.names
+        else:
+            return True
+
+
+class PVOnlyFilter(logging.Filter):
+    '''
+    99% as same as PVFilter class but only default return for PV unrelated message
+    Pass through only messages relevant to one or more PV names.
+
+    Parameters
+    ----------
+    names : string or list of string
+        PV name or PV name list which will be filtted in.
+
+    Return
+    ------
+    Bool: True or False
+        False if message is not PV related which doesn't has 'pv' as key in extra
+        True if 'pv' as key exist and pv name exist in Filter list.
+        False if message is PV related but pv name isn't in Filter list.
+    '''
+    def __init__(self, names):
+        self.names = names
+    def filter(self, record):
+        if hasattr(record, 'pv'):
+            return record.pv in self.names
+        else:
+            return False
+
 def set_handler(file=sys.stdout, datefmt='%H:%M:%S', color=True):
     """
     Set a new handler on the ``logging.getLogger('caproto')`` logger.
