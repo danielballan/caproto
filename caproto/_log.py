@@ -148,6 +148,28 @@ search_logger = logging.getLogger('caproto.bcast.search')
 current_handler = None  # overwritten below
 
 
+class CaprotoAdapter(logging.LoggerAdapter):
+    def process(self, msg, kwargs):
+        '''
+        Process the logging message and keyword arguments passed in to
+        a logging call to insert contextual information. You can either
+        manipulate the message itself, the keyword args or both. Return
+        the message and kwargs (of record) modified (or not) to suit
+        your needs.
+        '''
+        kwargs['extra'] = self.extra
+        #This is what the base class does
+        #https://github.com/python/cpython/blob/master/Lib/logging/__init__.py#L1782
+        #self.extra was set up by logging.LoggerAdapter from dict-like argument from
+        #CaprotoAdapter instance def. It allow us put customized attribute into record
+        #https://github.com/python/cpython/blob/master/Lib/logging/__init__.py#L1557
+        if 'pv' in self.extra:
+            msg = '[pv: %s] ' % self.extra['pv'] + msg
+        if 'server_address' in self.extra:
+            msg = '[server_address: %s] ' % self.extra['server_address'] + msg
+        return msg, kwargs
+
+
 def set_handler(file=sys.stdout, datefmt='%H:%M:%S', color=True):
     """
     Set a new handler on the ``logging.getLogger('caproto')`` logger.
