@@ -16,8 +16,8 @@ from ._commands import (AccessRightsResponse, CreateChFailResponse,
                         ClientNameRequest, CreateChanRequest,
                         CreateChanResponse, EventAddRequest, EventAddResponse,
                         EventCancelRequest, EventCancelResponse,
-                        HostNameRequest, ReadNotifyRequest, ReadRequest,
-                        ReadNotifyResponse, ReadResponse,
+                        HostNameRequest, ClientNameRequest, ReadNotifyRequest,
+                        ReadRequest, ReadNotifyResponse, ReadResponse,
                         SearchResponse, ServerDisconnResponse,
                         VersionRequest, VersionResponse, WriteNotifyRequest,
                         WriteNotifyResponse, WriteRequest,
@@ -31,6 +31,7 @@ from ._utils import (CLIENT, SERVER, NEED_DATA, DISCONNECTED, CaprotoKeyError,
 from ._dbr import (ChannelType, SubscriptionType, field_types, native_type)
 from ._constants import DEFAULT_PROTOCOL_VERSION
 from ._status import CAStatus
+from ._log import CaprotoAdapter, logger, search_logger, ch_logger
 
 
 __all__ = ('VirtualCircuit', 'ClientChannel', 'ServerChannel',
@@ -154,7 +155,11 @@ class VirtualCircuit:
         buffers_to_send = []
         for command in commands:
             self._process_command(self.our_role, command)
-            self.log.debug("Serializing %r", command)
+            if hasattr(command, 'name') and not isinstance(command, (ClientNameRequest, HostNameRequest)):
+                log = CaprotoAdapter(self.log, {'pv': command.name})
+                log.debug("Serializing %r", command)
+            else:
+                self.log.debug("Serializing %r", command)
             buffers_to_send.append(memoryview(command.header))
             buffers_to_send.extend(command.buffers)
         return buffers_to_send
