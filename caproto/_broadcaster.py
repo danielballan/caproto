@@ -12,6 +12,7 @@ from ._commands import (Beacon, RepeaterConfirmResponse, RepeaterRegisterRequest
                         SearchRequest, SearchResponse, VersionRequest,
                         read_datagram,
                         )
+from ._log import CaprotoAdapter, logger, ch_logger, search_logger
 
 
 __all__ = ('Broadcaster',)
@@ -73,7 +74,11 @@ class Broadcaster:
         bytes_to_send = b''
         history = []
         for i, command in enumerate(commands):
-            self.log.debug("Serializing %d of %d %r", 1 + i, len(commands), command)
+            if hasattr(command, 'name'):
+                logger = CaprotoAdapter(search_logger, {'pv': command.name})
+                logger.debug("Serializing %d of %d %r", 1 + i, len(commands), command)
+            else:
+                self.log.debug("Serializing %d of %d %r", 1 + i, len(commands), command)
             self._process_command(self.our_role, command, history=history)
             bytes_to_send += bytes(command)
         return bytes_to_send
