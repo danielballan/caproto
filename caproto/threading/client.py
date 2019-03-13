@@ -36,6 +36,7 @@ from .._utils import (batch_requests, CaprotoError, ThreadsafeCounter,
                       socket_bytes_available, CaprotoTimeoutError,
                       CaprotoTypeError, CaprotoRuntimeError, CaprotoValueError,
                       CaprotoKeyError, CaprotoNetworkError)
+from .._log import CaprotoAdapter, logger, ch_logger, search_logger
 
 
 print = partial(print, flush=True)
@@ -1068,8 +1069,8 @@ class Context:
             # and tracking circuit state, as well as a ClientChannel for
             # tracking channel state.
             for name in names:
-                pv_name_logger = logging.getLogger(f'caproto.bcast.search.{name}')
-                pv_name_logger.debug('Connecting %s on circuit with %s:%d', name, *address)
+                log = CaprotoAdapter(search_logger, {'pv': name})
+                log.debug('Connecting %s on circuit with %s:%d', name, *address)
                 # There could be multiple PVs with the same name and
                 # different priority. That is what we are looping over
                 # here. There could also be NO PVs with this name that need
@@ -1533,10 +1534,7 @@ class PV:
         self.priority = priority
         self.context = context
         self.access_rights = None  # will be overwritten with AccessRights
-        if self.context.pv_log_target == 'all':
-            self.log = logging.getLogger(f'caproto.ch.pv_name')
-        else:
-            self.log = self.getLogAdapter()
+        self.log = CaprotoAdapter(ch_logger, {'pv': self.name})
         # Use this lock whenever we touch circuit_manager or channel.
         self.component_lock = threading.RLock()
         self.circuit_ready = threading.Event()
