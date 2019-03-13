@@ -911,7 +911,6 @@ class Context:
         self.max_workers = max_workers
         self.client_name = client_name
         self.log = logging.getLogger(f'caproto.ctx.{id(self)}')
-        self._pv_log_target = 'all'
         self.pv_cache_lock = threading.RLock()
         self.circuit_managers = {}  # keyed on ((host, port), priority)
         self._lock_during_get_circuit_manager = threading.RLock()
@@ -954,13 +953,6 @@ class Context:
     def __exit__(self, exc_type, exc_value, traceback):
         self.disconnect(wait=True)
 
-    @property
-    def pv_log_target(self):
-        return self._pv_log_target
-
-    @pv_log_target.setter
-    def pv_log_target(self, name):
-        self._pv_log_target = name
 
     def get_pvs(self, *names, priority=0, connection_state_callback=None,
                 access_rights_callback=None,
@@ -1558,14 +1550,6 @@ class PV:
         self._in_use = threading.Condition()
         self._usages = 0
 
-    def getLogAdapter(self):
-        logger = logging.getLogger('caproto.pv_name')
-        logger.removeFilter(self.context._preFilter)
-        f = MyFilter(self.context.pv_log_target)
-        logger.addFilter(f)
-        self.context._preFilter = f
-        logger.setLevel('DEBUG')
-        return CustomAdapter(logger, {'pv': self.name})
 
     @property
     def timeout(self):
