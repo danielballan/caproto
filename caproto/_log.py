@@ -169,10 +169,12 @@ class CaprotoAdapter(logging.LoggerAdapter):
         #self.extra was set up by logging.LoggerAdapter from dict-like argument from
         #CaprotoAdapter instance def. It allow us put customized attribute into record
         #https://github.com/python/cpython/blob/master/Lib/logging/__init__.py#L1557
+        if 'address' in self.extra:
+            msg = '[address: %s] ' % self.extra['address'] + msg
         if 'pv' in self.extra:
             msg = '[pv: %s] ' % self.extra['pv'] + msg
-        if 'server_address' in self.extra:
-            msg = '[server_address: %s] ' % self.extra['server_address'] + msg
+        if 'role' in self.extra:
+            msg = '[role: %s] ' % self.extra['role'] + msg
         return msg, kwargs
 
 
