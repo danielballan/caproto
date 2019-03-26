@@ -108,6 +108,12 @@ class LogFormatter(logging.Formatter):
 
     def format(self, record):
         record.message = record.getMessage()
+        if hasattr(record, 'address'):
+            record.message = '[%s] %s' % (record.address, record.message)
+        if hasattr(record, 'pv'):
+            record.message = '[%s] %s' % (record.pv, record.message)
+        if hasattr(record, 'role'):
+            record.message = '[%s] %s' % (record.role, record.message)
         record.asctime = self.formatTime(record, self.datefmt)
 
         try:
