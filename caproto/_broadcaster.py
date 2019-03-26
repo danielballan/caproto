@@ -12,7 +12,7 @@ from ._commands import (Beacon, RepeaterConfirmResponse, RepeaterRegisterRequest
                         SearchRequest, SearchResponse, VersionRequest,
                         read_datagram,
                         )
-from ._log import CaprotoAdapter, logger, ch_logger, search_logger
+from ._log import logger, ch_logger, search_logger
 
 
 __all__ = ('Broadcaster',)
@@ -40,8 +40,10 @@ class Broadcaster:
         self.our_role = our_role
         if our_role is CLIENT:
             self.their_role = SERVER
+            self.role = 'SERVER'
         else:
             self.their_role = CLIENT
+            self.role = 'CLIENT'
         self.protocol_version = protocol_version
         self.unanswered_searches = {}  # map search id (cid) to name
         # Unlike VirtualCircuit and Channel, there is very little state to
@@ -75,10 +77,11 @@ class Broadcaster:
         history = []
         for i, command in enumerate(commands):
             if hasattr(command, 'name'):
-                logger = CaprotoAdapter(search_logger, {'pv': command.name})
-                logger.debug("Serializing %d of %d %r", 1 + i, len(commands), command)
+                logger = logging.LoggerAdapter(search_logger, {'pv': command.name, 'role': self.role})
+                logger.debug(f"Serializing %d of %d %r", 1 + i, len(commands), command)
             else:
-                self.log.debug("Serializing %d of %d %r", 1 + i, len(commands), command)
+                logger = logging.LoggerAdapter(search_logger, {'role': self.role})
+                logger.debug(f"Serializing %d of %d %r", 1 + i, len(commands), command)
             self._process_command(self.our_role, command, history=history)
             bytes_to_send += bytes(command)
         return bytes_to_send
@@ -109,9 +112,11 @@ class Broadcaster:
 
         for command in commands:
             if isinstance(command, Beacon):
-                self.beacon_log.debug("%s:%d (%dB) -> %r", *address, len(command), command)
+                log = logging.LoggerAdapter(self.beacon_log, {'address': address[0] + ':'+ str(address[1]), 'role': self.role})
+                log.debug("%s:%d (%dB) -> %r", *address, len(command), command)
             else:
-                self.log.debug("%s:%d (%dB) -> %r", *address, len(command), command)
+                log = logging.LoggerAdapter(self.log, {'address': address[0] + ':'+ str(address[1]), 'role': self.role})
+                log.debug("(%dB) -> %r", len(command), command)
         return commands
 
     def process_commands(self, commands):

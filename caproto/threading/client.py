@@ -36,7 +36,7 @@ from .._utils import (batch_requests, CaprotoError, ThreadsafeCounter,
                       socket_bytes_available, CaprotoTimeoutError,
                       CaprotoTypeError, CaprotoRuntimeError, CaprotoValueError,
                       CaprotoKeyError, CaprotoNetworkError)
-from .._log import CaprotoAdapter, logger, ch_logger, search_logger
+from .._log import logger, ch_logger, search_logger
 
 
 print = partial(print, flush=True)
@@ -338,8 +338,8 @@ class SharedBroadcaster:
         self.listeners = weakref.WeakSet()
 
         self.broadcaster = ca.Broadcaster(our_role=ca.CLIENT)
-        self.log = self.broadcaster.log
-        self.search_log = logging.getLogger(f'caproto.bcast.search')
+        self.log = logging.LoggerAdapter(self.broadcaster.log, {'role': 'CLIENT'})
+        self.search_log = logging.LoggerAdapter(logging.getLogger(f'caproto.bcast.search'), {'role': 'CLIENT'})
         self.command_bundle_queue = Queue()
         self.last_beacon = {}
         self.last_beacon_interval = {}
@@ -442,7 +442,7 @@ class SharedBroadcaster:
             else:
                 specified_port = port
             try:
-                self.broadcaster.log.debug(
+                self.log.debug(
                     'Sending %d bytes to %s:%d',
                     len(bytes_to_send), host, specified_port)
                 self.udp_sock.sendto(bytes_to_send, (host, specified_port))
@@ -597,9 +597,10 @@ class SharedBroadcaster:
                 if isinstance(command, ca.Beacon):
                     now = time.monotonic()
                     address = (command.address, command.server_port)
+                    log = logging.LoggerAdapter(self.log, {'address': address[0] + ':'+ str(address[1])})
                     if address not in self.last_beacon:
                         # We made a new friend!
-                        self.log.info("Watching Beacons from %s:%d",
+                        log.info("Watching Beacons from %s:%d",
                                       *address)
                         self._new_server_found()
                     else:
@@ -607,7 +608,7 @@ class SharedBroadcaster:
                         if interval < self.last_beacon_interval.get(address, 0) / 4:
                             # Beacons are arriving *faster*? The server at this
                             # address may have restarted.
-                            self.log.info(
+                            log.info(
                                 "Beacon anomaly: %s:%d may have restarted.",
                                 *address)
                             self._new_server_found()
@@ -644,7 +645,9 @@ class SharedBroadcaster:
                                 accepted_address, _ = self.search_results[name]
                                 new_address = ca.extract_address(command)
                                 if new_address != accepted_address:
-                                    pv_name_logger = logging.getLogger(f'caproto.bcast.search.{name}')
+                                    pv_name_logger = logging.LoggerAdapter(search_logger, {
+                                                    'pv': name,
+                                                    'address': accepted_address[0] + ':'+ str(accepted_address[1])})
                                     pv_name_logger.warning(
                                         "PV %s with cid %d found on multiple "
                                         "servers. Accepted address is %s:%d. "
@@ -738,7 +741,8 @@ class SharedBroadcaster:
                     # Record that we are checking on this address and set a
                     # deadline for a response.
                     checking[address] = now + RESPONSIVENESS_TIMEOUT
-                    self.log.debug(
+                    log = logging.LoggerAdapter(self.log, {'address': address[0] + ':'+ str(address[1])})
+                    log.debug(
                         "Missed Beacons from %s:%d. Sending EchoRequest to "
                         "check that server is responsive.", *address)
                     # Send on all circuits. One might be less backlogged
@@ -910,7 +914,7 @@ class Context:
             client_name = getpass.getuser()
         self.max_workers = max_workers
         self.client_name = client_name
-        self.log = logging.getLogger(f'caproto.ctx.{id(self)}')
+        self.log = logging.LoggerAdapter(logging.getLogger(f'caproto.ctx.{id(self)}'), {'role': 'CLIENT'})
         self.pv_cache_lock = threading.RLock()
         self.circuit_managers = {}  # keyed on ((host, port), priority)
         self._lock_during_get_circuit_manager = threading.RLock()
@@ -1061,7 +1065,9 @@ class Context:
             # and tracking circuit state, as well as a ClientChannel for
             # tracking channel state.
             for name in names:
-                log = CaprotoAdapter(search_logger, {'pv': name})
+                log = logging.LoggerAdapter(search_logger, {'pv': name,
+                                                    'address': address[0] + ':'+ str(address[1]),
+                                                    'role': 'CLIENT'})
                 log.debug('Connecting %s on circuit with %s:%d', name, *address)
                 # There could be multiple PVs with the same name and
                 # different priority. That is what we are looping over
@@ -1086,7 +1092,8 @@ class Context:
                     cm.pvs[cid] = pv
                     channels_grouped_by_circuit[cm].append(chan)
                     pv.circuit_ready.set()
-                    pv.log.debug('Connecting %s on circuit with %s:%d', name, *address)
+                    log = logging.LoggerAdapter(pv.log, {'address': address[0] + ':'+ str(address[1])})
+                    log.debug('Connecting %s on circuit with %s:%d', name, *address)
 
             # Initiate channel creation with the server.
             for cm, channels in channels_grouped_by_circuit.items():
@@ -1485,18 +1492,6 @@ class VirtualCircuitManager:
         except AttributeError:
             pass
 
-class CustomAdapter(logging.LoggerAdapter):
-    def process(self, msg, kwargs):
-        return '[pv: %s] %s' % (self.extra['pv'], msg), kwargs
-
-
-class MyFilter(logging.Filter):
-
-    def __init__(self, target_pv):
-        self.target_pv = target_pv
-
-    def filter(self, record):
-        return record.getMessage().split(' ')[1][:-1] == self.target_pv
 
 class PV:
     """
@@ -1526,7 +1521,7 @@ class PV:
         self.priority = priority
         self.context = context
         self.access_rights = None  # will be overwritten with AccessRights
-        self.log = CaprotoAdapter(ch_logger, {'pv': self.name})
+        self.log = logging.LoggerAdapter(ch_logger, {'pv': self.name, 'role': 'CLIENT'})
         # Use this lock whenever we touch circuit_manager or channel.
         self.component_lock = threading.RLock()
         self.circuit_ready = threading.Event()
@@ -1593,7 +1588,7 @@ class PV:
         self.access_rights_callback.process(self, rights)
 
     def connection_state_changed(self, state, channel):
-        self.log.info('%s connection state changed to %s.', self.name, state)
+        self.log.info('connection state changed to %s.', state)
         self.connection_state_callback.process(self, state)
         if state == 'disconnected':
             for sub in self.subscriptions.values():

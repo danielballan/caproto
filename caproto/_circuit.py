@@ -31,7 +31,7 @@ from ._utils import (CLIENT, SERVER, NEED_DATA, DISCONNECTED, CaprotoKeyError,
 from ._dbr import (ChannelType, SubscriptionType, field_types, native_type)
 from ._constants import DEFAULT_PROTOCOL_VERSION
 from ._status import CAStatus
-from ._log import CaprotoAdapter, logger, search_logger, ch_logger
+from ._log import logger, search_logger, ch_logger
 
 
 __all__ = ('VirtualCircuit', 'ClientChannel', 'ServerChannel',
@@ -62,8 +62,10 @@ class VirtualCircuit:
         self.our_role = our_role
         if our_role is CLIENT:
             self.their_role = SERVER
+            self.role = 'CLIENT'
         else:
             self.their_role = CLIENT
+            self.role = 'SERVER'
         self.address = address
         self.priority = priority
         self.channels = {}  # map cid to Channel
@@ -105,7 +107,10 @@ class VirtualCircuit:
         logger_name = (f"caproto.circ."
                        f"{self.address[0]}:{self.address[1]}."
                        f"{priority}")
-        self.log = logging.getLogger(logger_name)
+        self.raw_log = logging.getLogger(logger_name)
+        self.log = logging.LoggerAdapter(self.raw_log, {
+            'address': self.address[0] + ':'+ str(self.address[1]),
+            'role': self.role})
 
     @property
     def host(self):
@@ -156,7 +161,10 @@ class VirtualCircuit:
         for command in commands:
             self._process_command(self.our_role, command)
             if hasattr(command, 'name') and not isinstance(command, (ClientNameRequest, HostNameRequest)):
-                log = CaprotoAdapter(self.log, {'pv': command.name})
+                log = logging.LoggerAdapter(self.raw_log, {'pv': command.name,
+                    'address': self.address[0] + ':'+ str(self.address[1]),
+                    'role': self.role
+                    })
                 log.debug("Serializing %r", command)
             else:
                 self.log.debug("Serializing %r", command)
