@@ -229,6 +229,53 @@ class PVOnlyFilter(logging.Filter):
         else:
             return False
 
+
+class AddressFilter(logging.Filter):
+    def __init__(self, address_list):
+        self.address_list = address_list
+    def filter(self, record):
+        if hasattr(record, 'address'):
+            if record.address in self.address_list:
+                return True
+            else:
+                return record.address.split(':')[0] in self.address_list
+        else:
+            return True
+
+
+class AddressOnlyFilter(logging.Filter):
+    def __init__(self, address_list):
+        self.address_list = address_list
+    def filter(self, record):
+        if hasattr(record, 'address'):
+            if record.address in self.address_list:
+                return True
+            else:
+                return record.address.split(':')[0] in self.address_list
+        else:
+            return False
+
+
+class RoleFilter(logging.Filter):
+    def __init__(self, roles):
+        self.roles = roles
+    def filter(self, record):
+        if hasattr(record, 'role'):
+            return record.role in roles
+        else:
+            return True
+
+
+class RoleOnlyFilter(logging.Filter):
+    def __init__(self, roles):
+        self.roles = roles
+    def filter(self, record):
+        if hasattr(record, 'role'):
+            return record.role in roles
+        else:
+            return False
+
+
 def set_handler(file=sys.stdout, datefmt='%H:%M:%S', color=True):
     """
     Set a new handler on the ``logging.getLogger('caproto')`` logger.
