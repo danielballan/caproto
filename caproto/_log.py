@@ -318,6 +318,7 @@ def set_handler(file=sys.stdout, datefmt='%H:%M:%S', color=True):
         handler = logging.FileHandler(file)
     else:
         handler = logging.StreamHandler(file)
+    handler.setLevel('DEBUG')
     if color:
         format = color_log_format
     else:
