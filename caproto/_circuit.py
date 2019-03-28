@@ -104,8 +104,8 @@ class VirtualCircuit:
         logger_name = (f"caproto.circ."
                        f"{self.address[0]}:{self.address[1]}."
                        f"{priority}")
-        self.raw_log = logging.getLogger(logger_name)
-        self.log = logging.LoggerAdapter(self.raw_log, {
+        raw_log = logging.getLogger(logger_name)
+        self.log = logging.LoggerAdapter(raw_log, {
             'address': self.address[0] + ':'+ str(self.address[1]),
             'role': repr(self.our_role)})
 
