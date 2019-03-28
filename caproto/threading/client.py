@@ -338,7 +338,7 @@ class SharedBroadcaster:
         self.listeners = weakref.WeakSet()
 
         self.broadcaster = ca.Broadcaster(our_role=ca.CLIENT)
-        self.log = logging.LoggerAdapter(self.broadcaster.log, {'role': 'CLIENT'})
+        self.log =logging.LoggerAdapter(self.broadcaster.log, {'role': 'CLIENT'})
         self.search_log = logging.LoggerAdapter(logging.getLogger(f'caproto.bcast.search'), {'role': 'CLIENT'})
         self.command_bundle_queue = Queue()
         self.last_beacon = {}
@@ -442,9 +442,10 @@ class SharedBroadcaster:
             else:
                 specified_port = port
             try:
-                self.log.debug(
+                tags = {'role': 'CLIENT', 'address': host+ ':'+ str(specified_port)}
+                self.broadcaster.log.debug(
                     'Sending %d bytes to %s:%d',
-                    len(bytes_to_send), host, specified_port)
+                    len(bytes_to_send), host, specified_port, extra=tags)
                 self.udp_sock.sendto(bytes_to_send, (host, specified_port))
             except OSError as ex:
                 raise CaprotoNetworkError(
@@ -597,11 +598,11 @@ class SharedBroadcaster:
                 if isinstance(command, ca.Beacon):
                     now = time.monotonic()
                     address = (command.address, command.server_port)
-                    log = logging.LoggerAdapter(self.log, {'address': address[0] + ':'+ str(address[1])})
+                    tags = {'role': 'CLIENT', 'address': address[0] + ':'+ str(address[1])}
                     if address not in self.last_beacon:
                         # We made a new friend!
-                        log.info("Watching Beacons from %s:%d",
-                                      *address)
+                        self.broadcaster.log.info("Watching Beacons from %s:%d",
+                                      *address, extra=tags)
                         self._new_server_found()
                     else:
                         interval = now - self.last_beacon[address]
@@ -741,10 +742,10 @@ class SharedBroadcaster:
                     # Record that we are checking on this address and set a
                     # deadline for a response.
                     checking[address] = now + RESPONSIVENESS_TIMEOUT
-                    log = logging.LoggerAdapter(self.log, {'address': address[0] + ':'+ str(address[1])})
-                    log.debug(
+                    tags = {'role': 'CLIENT', 'address': address[0] + ':'+ str(address[1])}
+                    self.broadcaster.log.debug(
                         "Missed Beacons from %s:%d. Sending EchoRequest to "
-                        "check that server is responsive.", *address)
+                        "check that server is responsive.", *address, extra=tags)
                     # Send on all circuits. One might be less backlogged
                     # with queued commands than the others and thus able to
                     # respond faster. In the majority of cases there will only
@@ -1430,8 +1431,9 @@ class VirtualCircuitManager:
         # Ensure that this method is idempotent.
         if self.dead.is_set():
             return
+        tags = {'address': self.circuit.address[0]+':'+self.circuit.address[1]}
         self.log.debug('Virtual circuit with address %s:%d has disconnected.',
-                       *self.circuit.address)
+                       *self.circuit.address, extra = tags)
         # Update circuit state. This will be reflected on all PVs, which
         # continue to hold a reference to this disconnected circuit.
         self.circuit.disconnect()
@@ -1468,6 +1470,7 @@ class VirtualCircuitManager:
 
         if reconnect:
             # Kick off attempt to reconnect all PVs via fresh circuit(s).
+            tags = {'address': self.circuit.address[0]+':'+self.circuit.address[1]}
             self.log.debug('Kicking off reconnection attempts for %d PVs '
                            'disconnected from %s:%d....',
                            len(self.channels), *self.circuit.address)
