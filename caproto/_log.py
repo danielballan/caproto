@@ -3,8 +3,7 @@
 
 import logging
 import sys
-import warnings
-try:
+import warnings try:
     import colorama
     colorama.init()
 except ImportError:
@@ -152,30 +151,6 @@ logger = logging.getLogger('caproto')
 ch_logger = logging.getLogger('caproto.ch')
 search_logger = logging.getLogger('caproto.bcast.search')
 current_handler = None  # overwritten below
-
-
-class CaprotoAdapter(logging.LoggerAdapter):
-    def process(self, msg, kwargs):
-        '''
-        Process the logging message and keyword arguments passed in to
-        a logging call to insert contextual information. You can either
-        manipulate the message itself, the keyword args or both. Return
-        the message and kwargs (of record) modified (or not) to suit
-        your needs.
-        '''
-        kwargs['extra'] = self.extra
-        #This is what the base class does
-        #https://github.com/python/cpython/blob/master/Lib/logging/__init__.py#L1782
-        #self.extra was set up by logging.LoggerAdapter from dict-like argument from
-        #CaprotoAdapter instance def. It allow us put customized attribute into record
-        #https://github.com/python/cpython/blob/master/Lib/logging/__init__.py#L1557
-        if 'address' in self.extra:
-            msg = '[address: %s] ' % self.extra['address'] + msg
-        if 'pv' in self.extra:
-            msg = '[pv: %s] ' % self.extra['pv'] + msg
-        if 'role' in self.extra:
-            msg = '[role: %s] ' % self.extra['role'] + msg
-        return msg, kwargs
 
 
 class PVFilter(logging.Filter):
