@@ -104,10 +104,7 @@ class VirtualCircuit:
         logger_name = (f"caproto.circ."
                        f"{self.address[0]}:{self.address[1]}."
                        f"{priority}")
-        raw_log = logging.getLogger(logger_name)
-        self.log = logging.LoggerAdapter(raw_log, {
-            'address': self.address[0] + ':'+ str(self.address[1]),
-            'role': repr(self.our_role)})
+        self.log = logging.getLogger(logger_name)
 
     @property
     def host(self):
@@ -158,13 +155,13 @@ class VirtualCircuit:
         for command in commands:
             self._process_command(self.our_role, command)
             if hasattr(command, 'name') and not isinstance(command, (ClientNameRequest, HostNameRequest)):
-                log = logging.LoggerAdapter(self.raw_log, {'pv': command.name,
+                tags = {'pv': command.name,
                     'address': self.address[0] + ':'+ str(self.address[1]),
-                    'role': repr(self.our_role))
-                    })
-                log.debug("Serializing %r", command)
+                    'role': repr(self.our_role)}
             else:
-                self.log.debug("Serializing %r", command)
+                tags = {'address': self.address[0] + ':'+ str(self.address[1]),
+                    'role': repr(self.our_role)}
+            self.log.debug("Serializing %r", command, extra=tags)
             buffers_to_send.append(memoryview(command.header))
             buffers_to_send.extend(command.buffers)
         return buffers_to_send
