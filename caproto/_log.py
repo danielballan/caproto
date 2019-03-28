@@ -3,7 +3,8 @@
 
 import logging
 import sys
-import warnings try:
+import warnings
+try:
     import colorama
     colorama.init()
 except ImportError:
@@ -107,6 +108,8 @@ class LogFormatter(logging.Formatter):
 
     def format(self, record):
         record.message = record.getMessage()
+        if hasattr(record, 'receiver_address'):
+            record.message = '--> [%s] %s' % (record.receiver_address, record.message)
         if hasattr(record, 'address'):
             record.message = '[%s] %s' % (record.address, record.message)
         if hasattr(record, 'pv'):
