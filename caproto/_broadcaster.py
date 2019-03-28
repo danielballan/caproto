@@ -75,11 +75,13 @@ class Broadcaster:
         history = []
         for i, command in enumerate(commands):
             if hasattr(command, 'name'):
-                logger = logging.LoggerAdapter(search_logger, {'pv': command.name, 'role': repr(self.our_role)})
-                logger.debug(f"Serializing %d of %d %r", 1 + i, len(commands), command)
+                tags = {'pv': command.name, 'role': repr(self.our_role)}
+            elif hasattr(command, 'client_address'):
+                tags = {'role': repr(self.our_role),
+                    'address': command.client_address}
             else:
-                logger = logging.LoggerAdapter(search_logger, {'role': repr(self.our_role)})
-                logger.debug(f"Serializing %d of %d %r", 1 + i, len(commands), command)
+                tags = {'role': repr(self.our_role)}
+            search_logger.debug(f"Serializing %d of %d %r", 1 + i, len(commands), command, extra=tags)
             self._process_command(self.our_role, command, history=history)
             bytes_to_send += bytes(command)
         return bytes_to_send
@@ -110,11 +112,20 @@ class Broadcaster:
 
         for command in commands:
             if isinstance(command, Beacon):
-                log = logging.LoggerAdapter(self.beacon_log, {'address': address[0] + ':'+ str(address[1]), 'role': repr(self.our_role)})
-                log.debug("%s:%d (%dB) -> %r", *address, len(command), command)
+                tags = {'address': address[0] + ':'+ str(address[1]),
+                    'role': repr(self.our_role)}
+                self.beacon_log.debug("%s:%d (%dB) -> %r", *address, len(command), command, extra=tags)
+            elif hasattr(command, 'ip'):
+                tags = {'address': address[0] + ':'+ str(address[1]),
+                        'receiver_address': command.ip + ':' + str(command.port),
+                        'role': repr(self.our_role)
+                        }
+                self.log.debug("(%dB) -> %r", len(command), command, extra=tags)
             else:
-                log = logging.LoggerAdapter(self.log, {'address': address[0] + ':'+ str(address[1]), 'role': repr(self.our_role)})
-                log.debug("(%dB) -> %r", len(command), command)
+                tags = {'address': address[0] + ':'+ str(address[1]),
+                        'role': repr(self.our_role)
+                        }
+                self.log.debug("(%dB) -> %r", len(command), command, extra=tags)
         return commands
 
     def process_commands(self, commands):
