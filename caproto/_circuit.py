@@ -3,8 +3,7 @@
 # companion to a TCP socket managed by a higher-level client or server
 # implementation, updating its state in response to incoming and outgoing TCP
 # bytestreams. Each Channel belongs to a circuit, and tracks state particular
-# to that Channel. A ClientChannel provides convenience methods for composing
-# Requests; a ServerChannel provides convenience methods for composing
+# to that Channel. A ClientChannel provides convenience methods for composing # Requests; a ServerChannel provides convenience methods for composing
 # Responses.
 import logging
 from collections import deque
@@ -62,10 +61,8 @@ class VirtualCircuit:
         self.our_role = our_role
         if our_role is CLIENT:
             self.their_role = SERVER
-            self.role = 'CLIENT'
         else:
             self.their_role = CLIENT
-            self.role = 'SERVER'
         self.address = address
         self.priority = priority
         self.channels = {}  # map cid to Channel
@@ -110,7 +107,7 @@ class VirtualCircuit:
         self.raw_log = logging.getLogger(logger_name)
         self.log = logging.LoggerAdapter(self.raw_log, {
             'address': self.address[0] + ':'+ str(self.address[1]),
-            'role': self.role})
+            'role': repr(self.our_role)})
 
     @property
     def host(self):
@@ -163,7 +160,7 @@ class VirtualCircuit:
             if hasattr(command, 'name') and not isinstance(command, (ClientNameRequest, HostNameRequest)):
                 log = logging.LoggerAdapter(self.raw_log, {'pv': command.name,
                     'address': self.address[0] + ':'+ str(self.address[1]),
-                    'role': self.role
+                    'role': repr(self.our_role))
                     })
                 log.debug("Serializing %r", command)
             else:

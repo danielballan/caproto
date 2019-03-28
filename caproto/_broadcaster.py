@@ -40,10 +40,8 @@ class Broadcaster:
         self.our_role = our_role
         if our_role is CLIENT:
             self.their_role = SERVER
-            self.role = 'SERVER'
         else:
             self.their_role = CLIENT
-            self.role = 'CLIENT'
         self.protocol_version = protocol_version
         self.unanswered_searches = {}  # map search id (cid) to name
         # Unlike VirtualCircuit and Channel, there is very little state to
@@ -77,10 +75,10 @@ class Broadcaster:
         history = []
         for i, command in enumerate(commands):
             if hasattr(command, 'name'):
-                logger = logging.LoggerAdapter(search_logger, {'pv': command.name, 'role': self.role})
+                logger = logging.LoggerAdapter(search_logger, {'pv': command.name, 'role': repr(self.our_role)})
                 logger.debug(f"Serializing %d of %d %r", 1 + i, len(commands), command)
             else:
-                logger = logging.LoggerAdapter(search_logger, {'role': self.role})
+                logger = logging.LoggerAdapter(search_logger, {'role': repr(self.our_role)})
                 logger.debug(f"Serializing %d of %d %r", 1 + i, len(commands), command)
             self._process_command(self.our_role, command, history=history)
             bytes_to_send += bytes(command)
@@ -112,10 +110,10 @@ class Broadcaster:
 
         for command in commands:
             if isinstance(command, Beacon):
-                log = logging.LoggerAdapter(self.beacon_log, {'address': address[0] + ':'+ str(address[1]), 'role': self.role})
+                log = logging.LoggerAdapter(self.beacon_log, {'address': address[0] + ':'+ str(address[1]), 'role': repr(self.our_role)})
                 log.debug("%s:%d (%dB) -> %r", *address, len(command), command)
             else:
-                log = logging.LoggerAdapter(self.log, {'address': address[0] + ':'+ str(address[1]), 'role': self.role})
+                log = logging.LoggerAdapter(self.log, {'address': address[0] + ':'+ str(address[1]), 'role': repr(self.our_role)})
                 log.debug("(%dB) -> %r", len(command), command)
         return commands
 
