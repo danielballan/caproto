@@ -78,7 +78,9 @@ class Broadcaster:
                 tags = {'pv': command.name, 'role': repr(self.our_role)}
             elif hasattr(command, 'client_address'):
                 tags = {'role': repr(self.our_role),
-                    'address': command.client_address}
+                    'address': (command.client_address, '\b')}
+                    # '\b' move cursor back one character which will overwrite ':'
+                    # in [host:port] tag in log message and leave [host] there
             else:
                 tags = {'role': repr(self.our_role)}
             search_logger.debug(f"Serializing %d of %d %r", 1 + i, len(commands), command, extra=tags)
