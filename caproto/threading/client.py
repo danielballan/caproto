@@ -442,7 +442,7 @@ class SharedBroadcaster:
             else:
                 specified_port = port
             try:
-                tags = {'role': 'CLIENT', 'address': host+ ':'+ str(specified_port)}
+                tags = {'role': 'CLIENT', 'address': (host, specified_port)}
                 self.broadcaster.log.debug(
                     'Sending %d bytes to %s:%d',
                     len(bytes_to_send), host, specified_port, extra=tags)
@@ -598,7 +598,7 @@ class SharedBroadcaster:
                 if isinstance(command, ca.Beacon):
                     now = time.monotonic()
                     address = (command.address, command.server_port)
-                    tags = {'role': 'CLIENT', 'address': address[0] + ':'+ str(address[1])}
+                    tags = {'role': 'CLIENT', 'address': address}
                     if address not in self.last_beacon:
                         # We made a new friend!
                         self.broadcaster.log.info("Watching Beacons from %s:%d",
@@ -648,7 +648,7 @@ class SharedBroadcaster:
                                 if new_address != accepted_address:
                                     pv_name_logger = logging.LoggerAdapter(search_logger, {
                                                     'pv': name,
-                                                    'address': accepted_address[0] + ':'+ str(accepted_address[1])})
+                                                    'address': accepted_address})
                                     pv_name_logger.warning(
                                         "PV %s with cid %d found on multiple "
                                         "servers. Accepted address is %s:%d. "
@@ -742,7 +742,7 @@ class SharedBroadcaster:
                     # Record that we are checking on this address and set a
                     # deadline for a response.
                     checking[address] = now + RESPONSIVENESS_TIMEOUT
-                    tags = {'role': 'CLIENT', 'address': address[0] + ':'+ str(address[1])}
+                    tags = {'role': 'CLIENT', 'address': address}
                     self.broadcaster.log.debug(
                         "Missed Beacons from %s:%d. Sending EchoRequest to "
                         "check that server is responsive.", *address, extra=tags)
@@ -1067,7 +1067,7 @@ class Context:
             # tracking channel state.
             for name in names:
                 log = logging.LoggerAdapter(search_logger, {'pv': name,
-                                                    'address': address[0] + ':'+ str(address[1]),
+                                                    'address': address,
                                                     'role': 'CLIENT'})
                 log.debug('Connecting %s on circuit with %s:%d', name, *address)
                 # There could be multiple PVs with the same name and
@@ -1093,7 +1093,7 @@ class Context:
                     cm.pvs[cid] = pv
                     channels_grouped_by_circuit[cm].append(chan)
                     pv.circuit_ready.set()
-                    log = logging.LoggerAdapter(pv.log, {'address': address[0] + ':'+ str(address[1])})
+                    log = logging.LoggerAdapter(pv.log, {'address': address})
                     log.debug('Connecting %s on circuit with %s:%d', name, *address)
 
             # Initiate channel creation with the server.
@@ -1431,7 +1431,7 @@ class VirtualCircuitManager:
         # Ensure that this method is idempotent.
         if self.dead.is_set():
             return
-        tags = {'address': self.circuit.address[0]+':'+self.circuit.address[1]}
+        tags = {'address': self.circuit.address}
         self.log.debug('Virtual circuit with address %s:%d has disconnected.',
                        *self.circuit.address, extra = tags)
         # Update circuit state. This will be reflected on all PVs, which
@@ -1470,7 +1470,7 @@ class VirtualCircuitManager:
 
         if reconnect:
             # Kick off attempt to reconnect all PVs via fresh circuit(s).
-            tags = {'address': self.circuit.address[0]+':'+self.circuit.address[1]}
+            tags = {'address': self.circuit.address}
             self.log.debug('Kicking off reconnection attempts for %d PVs '
                            'disconnected from %s:%d....',
                            len(self.channels), *self.circuit.address)

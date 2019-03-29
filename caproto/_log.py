@@ -109,9 +109,9 @@ class LogFormatter(logging.Formatter):
     def format(self, record):
         record.message = record.getMessage()
         if hasattr(record, 'receiver_address'):
-            record.message = '--> [%s] %s' % (record.receiver_address, record.message)
+            record.message = '--> [%s] %s' % (record.receiver_address[0] + ':' + str(record.receiver_address[1]), record.message)
         if hasattr(record, 'address'):
-            record.message = '[%s] %s' % (record.address, record.message)
+            record.message = '[%s] %s' % (record.address[0] + ':' + str(record.address[1]), record.message)
         if hasattr(record, 'pv'):
             record.message = '[%s] %s' % (record.pv, record.message)
         if hasattr(record, 'role'):
@@ -213,10 +213,11 @@ class AddressFilter(logging.Filter):
         self.address_list = address_list
     def filter(self, record):
         if hasattr(record, 'address'):
-            if record.address in self.address_list:
+            address_str = record.address[0] + ':' + str(record.address[1])
+            if address_str in self.address_list:
                 return True
             else:
-                return record.address.split(':')[0] in self.address_list
+                return record.address[0] in self.address_list
         else:
             return True
 
@@ -226,10 +227,11 @@ class AddressOnlyFilter(logging.Filter):
         self.address_list = address_list
     def filter(self, record):
         if hasattr(record, 'address'):
-            if record.address in self.address_list:
+            address_str = record.address[0] + ':' + str(record.address[1])
+            if address_str in self.address_list:
                 return True
             else:
-                return record.address.split(':')[0] in self.address_list
+                return record.address[0] in self.address_list
         else:
             return False
 

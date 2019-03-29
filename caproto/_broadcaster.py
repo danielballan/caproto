@@ -112,17 +112,17 @@ class Broadcaster:
 
         for command in commands:
             if isinstance(command, Beacon):
-                tags = {'address': address[0] + ':'+ str(address[1]),
+                tags = {'address': address,
                     'role': repr(self.our_role)}
                 self.beacon_log.debug("%s:%d (%dB) -> %r", *address, len(command), command, extra=tags)
             elif hasattr(command, 'ip'):
-                tags = {'address': address[0] + ':'+ str(address[1]),
-                        'receiver_address': command.ip + ':' + str(command.port),
+                tags = {'address': address,
+                        'receiver_address': (command.ip, command.port),
                         'role': repr(self.our_role)
                         }
                 self.log.debug("(%dB) -> %r", len(command), command, extra=tags)
             else:
-                tags = {'address': address[0] + ':'+ str(address[1]),
+                tags = {'address': address,
                         'role': repr(self.our_role)
                         }
                 self.log.debug("(%dB) -> %r", len(command), command, extra=tags)
