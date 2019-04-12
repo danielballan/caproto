@@ -244,7 +244,7 @@ class PVOnlyFilter(logging.Filter):
     ------
     Bool: True or False
         False if message is not PV related which doesn't has 'pv' as key in extra
-        True if 'pv' as key exist and pv name exist in Filter list.
+        True if 'pv' as key exists and pv name exists in Filter list.
         False if message is PV related but pv name isn't in Filter list.
     '''
     def __init__(self, names, level='NOTSET', pv_unrelated_flag=False):
