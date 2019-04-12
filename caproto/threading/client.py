@@ -943,7 +943,6 @@ class Context:
         self.selector = SelectorThread(parent=self)
         self.selector.start()
         self._user_disconnected = False
-        self._preFilter = None
 
     def __repr__(self):
         return (f"<Context "
