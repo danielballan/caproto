@@ -186,7 +186,7 @@ class PVFilter(logging.Filter):
     def __init__(self, names, level='NOTSET', pv_unrelated_flag=True):
         self.names = names
         self.level = level
-        self.levelno = logging.getLevelName('level')
+        self.levelno = logging.getLevelName(level)
         self.pv_unrelated_flag = pv_unrelated_flag
 
     def filter(self, record):
@@ -219,7 +219,7 @@ class PVOnlyFilter(logging.Filter):
     def __init__(self, names, level='NOTSET', pv_unrelated_flag=False):
         self.names = names
         self.level = level
-        self.levelno = logging.getLevelName('level')
+        self.levelno = logging.getLevelName(level)
         self.pv_unrelated_flag = pv_unrelated_flag
 
     def filter(self, record):
