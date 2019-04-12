@@ -303,6 +303,7 @@ class RoleFilter(logging.Filter):
 class RoleOnlyFilter(logging.Filter):
     def __init__(self, roles):
         self.roles = roles
+
     def filter(self, record):
         if hasattr(record, 'role'):
             return record.role in roles
