@@ -73,12 +73,12 @@ class Broadcaster:
         """
         bytes_to_send = b''
         history = []
+        total_commands = len(commands)
         for i, command in enumerate(commands):
-            if hasattr(command, 'name'):
-                tags = {'pv': command.name, 'role': repr(self.our_role)}
-            else:
-                tags = {'role': repr(self.our_role)}
-            search_logger.debug(f"Serializing %d of %d %r", 1 + i, len(commands), command, extra=tags)
+            tags = {'role': repr(self.our_role)}
+                if hasattr(command, 'name'):
+                    tags['pv'] = command.name
+            search_logger.debug(f"Serializing %d of %d %r", 1 + i, len(total_commands), command, extra=tags)
             self._process_command(self.our_role, command, history=history)
             bytes_to_send += bytes(command)
         return bytes_to_send
