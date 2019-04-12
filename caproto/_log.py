@@ -243,7 +243,7 @@ class PVOnlyFilter(logging.Filter):
     Returns
     ------
     Bool: True or False
-        False if message is not PV related which doesn't has 'pv' as key in extra
+        False if message is not PV related which doesn't have 'pv' as key in extra
         True if 'pv' as key exists and pv name exists in Filter list.
         False if message is PV related but pv name isn't in Filter list.
     '''
