@@ -211,7 +211,7 @@ class PVFilter(logging.Filter):
     Returns
     -------
     Bool: True or False
-        True if message is not PV related which doesn't has 'pv' as key in extra
+        True if message is not PV related which doesn't have 'pv' as key in extra
         True if 'pv' as key exist and pv name exist in Filter list.
         False if message is PV related but pv name isn't in Filter list.
     '''
