@@ -156,12 +156,14 @@ class VirtualCircuit:
         for command in commands:
             self._process_command(self.our_role, command)
             if hasattr(command, 'name') and not isinstance(command, (ClientNameRequest, HostNameRequest)):
-                tags = {'pv': command.name,
+                tags = {
+                    'pv': command.name,
                     'address': self.address,
                     'role': repr(self.our_role)}
             else:
-                tags = {'address': self.address,
-                        'role': repr(self.our_role)}
+                tags = {
+                    'address': self.address,
+                    'role': repr(self.our_role)}
             self.log.debug("Serializing %r", command, extra=tags)
             buffers_to_send.append(memoryview(command.header))
             buffers_to_send.extend(command.buffers)
