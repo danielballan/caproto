@@ -609,7 +609,7 @@ class SharedBroadcaster:
                         if interval < self.last_beacon_interval.get(address, 0) / 4:
                             # Beacons are arriving *faster*? The server at this
                             # address may have restarted.
-                            log.info(
+                            self.broadcaster.log.info(
                                 "Beacon anomaly: %s:%d may have restarted.",
                                 *address)
                             self._new_server_found()
