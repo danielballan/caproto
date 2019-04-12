@@ -3,7 +3,8 @@
 # companion to a TCP socket managed by a higher-level client or server
 # implementation, updating its state in response to incoming and outgoing TCP
 # bytestreams. Each Channel belongs to a circuit, and tracks state particular
-# to that Channel. A ClientChannel provides convenience methods for composing # Requests; a ServerChannel provides convenience methods for composing
+# to that Channel. A ClientChannel provides convenience methods for composing
+# Requests; a ServerChannel provides convenience methods for composing
 # Responses.
 import logging
 from collections import deque
