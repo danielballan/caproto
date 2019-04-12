@@ -251,6 +251,7 @@ class PVOnlyFilter(logging.Filter):
         self.names = names
         self.level = level
         self.pv_unrelated_flag = pv_unrelated_flag
+
     def filter(self, record):
         if hasattr(record, 'pv'):
             for i in self.names:
