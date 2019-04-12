@@ -338,7 +338,7 @@ class SharedBroadcaster:
         self.listeners = weakref.WeakSet()
 
         self.broadcaster = ca.Broadcaster(our_role=ca.CLIENT)
-        self.log =logging.LoggerAdapter(self.broadcaster.log, {'role': 'CLIENT'})
+        self.log = logging.LoggerAdapter(self.broadcaster.log, {'role': 'CLIENT'})
         self.search_log = logging.LoggerAdapter(logging.getLogger(f'caproto.bcast.search'), {'role': 'CLIENT'})
         self.command_bundle_queue = Queue()
         self.last_beacon = {}
@@ -1432,7 +1432,7 @@ class VirtualCircuitManager:
             return
         tags = {'address': self.circuit.address}
         self.log.debug('Virtual circuit with address %s:%d has disconnected.',
-                       *self.circuit.address, extra = tags)
+                       *self.circuit.address, extra=tags)
         # Update circuit state. This will be reflected on all PVs, which
         # continue to hold a reference to this disconnected circuit.
         self.circuit.disconnect()

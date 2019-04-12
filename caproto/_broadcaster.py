@@ -53,7 +53,7 @@ class Broadcaster:
             dont_clash_with=self.unanswered_searches,
         )
         self.log = logging.getLogger(f"caproto.bcast")
-        self.beacon_log = logging.getLogger(f'caproto.bcast.beacon')
+        self.beacon_log = logging.getLogger('caproto.bcast.beacon')
 
     def send(self, *commands):
         """
