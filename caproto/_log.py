@@ -264,6 +264,7 @@ class PVOnlyFilter(logging.Filter):
 class AddressFilter(logging.Filter):
     def __init__(self, address_list):
         self.address_list = address_list
+
     def filter(self, record):
         if hasattr(record, 'address'):
             address_str = record.address[0] + ':' + str(record.address[1])
