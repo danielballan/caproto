@@ -206,7 +206,7 @@ class PVFilter(logging.Filter):
     Parameters
     ----------
     names : string or list of string
-        PV name or PV name list which will be filtted in.
+        PV name or PV name list which will be filtered in.
 
     Return
     ------
