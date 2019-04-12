@@ -161,7 +161,7 @@ class VirtualCircuit:
                     'role': repr(self.our_role)}
             else:
                 tags = {'address': self.address,
-                    'role': repr(self.our_role)}
+                        'role': repr(self.our_role)}
             self.log.debug("Serializing %r", command, extra=tags)
             buffers_to_send.append(memoryview(command.header))
             buffers_to_send.extend(command.buffers)
