@@ -201,7 +201,7 @@ class logger_nameFilter(logging.Filter):
 class PVFilter(logging.Filter):
     '''
     Pass through only messages relevant to one or more PV names and
-    pv-unrelated message.
+    pv-unrelated messages.
 
     Parameters
     ----------
