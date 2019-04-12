@@ -1,6 +1,6 @@
 # The LogFormatter is adapted light from tornado, which is licensed under
 # Apache 2.0. See other_licenses/ in the repository directory.
-
+import fnmatch
 import logging
 import sys
 import warnings
@@ -156,6 +156,48 @@ search_logger = logging.getLogger('caproto.bcast.search')
 current_handler = None  # overwritten below
 
 
+CRITICAL = 50
+FATAL = CRITICAL
+ERROR = 40
+WARNING = 30
+WARN = WARNING
+INFO = 20
+DEBUG = 10
+NOTSET = 0
+
+
+_levelToName = {
+    CRITICAL: 'CRITICAL',
+    ERROR: 'ERROR',
+    WARNING: 'WARNING',
+    INFO: 'INFO',
+    DEBUG: 'DEBUG',
+    NOTSET: 'NOTSET',
+}
+
+
+_nameToLevel = {
+    'CRITICAL': CRITICAL,
+    'FATAL': FATAL,
+    'ERROR': ERROR,
+    'WARN': WARNING,
+    'WARNING': WARNING,
+    'INFO': INFO,
+    'DEBUG': DEBUG,
+    'NOTSET': NOTSET,
+}
+
+
+class logger_nameFilter(logging.Filter):
+    def __init__(self, logger_names):
+        self.logger_names = logger_names
+    def filter(self, record):
+        for i in self.logger_names:
+            if fnmatch.fnmatch(record.name, i):
+                return True
+        return False
+
+
 class PVFilter(logging.Filter):
     '''
     Pass through only messages relevant to one or more PV names and
@@ -173,13 +215,18 @@ class PVFilter(logging.Filter):
         True if 'pv' as key exist and pv name exist in Filter list.
         False if message is PV related but pv name isn't in Filter list.
     '''
-    def __init__(self, names):
+    def __init__(self, names, level='NOTSET', pv_unrelated_flag=True):
         self.names = names
+        self.level = level
+        self.pv_unrelated_flag = pv_unrelated_flag
     def filter(self, record):
         if hasattr(record, 'pv'):
-            return record.pv in self.names
+            for i in self.names:
+                if fnmatch.fnmatch(record.pv, i) and record.levelno >= _nameToLevel[self.level]:
+                    return True
+            return False
         else:
-            return True
+            return self.pv_unrelated_flag
 
 
 class PVOnlyFilter(logging.Filter):
@@ -199,13 +246,18 @@ class PVOnlyFilter(logging.Filter):
         True if 'pv' as key exist and pv name exist in Filter list.
         False if message is PV related but pv name isn't in Filter list.
     '''
-    def __init__(self, names):
+    def __init__(self, names, level='NOTSET', pv_unrelated_flag=False):
         self.names = names
+        self.level = level
+        self.pv_unrelated_flag = pv_unrelated_flag
     def filter(self, record):
         if hasattr(record, 'pv'):
-            return record.pv in self.names
-        else:
+            for i in self.names:
+                if fnmatch.fnmatch(record.pv, i) and record.levelno >= _nameToLevel[self.level]:
+                    return True
             return False
+        else:
+            return self.pv_unrelated_flag
 
 
 class AddressFilter(logging.Filter):
