@@ -156,38 +156,6 @@ search_logger = logging.getLogger('caproto.bcast.search')
 current_handler = None  # overwritten below
 
 
-CRITICAL = 50
-FATAL = CRITICAL
-ERROR = 40
-WARNING = 30
-WARN = WARNING
-INFO = 20
-DEBUG = 10
-NOTSET = 0
-
-
-_levelToName = {
-    CRITICAL: 'CRITICAL',
-    ERROR: 'ERROR',
-    WARNING: 'WARNING',
-    INFO: 'INFO',
-    DEBUG: 'DEBUG',
-    NOTSET: 'NOTSET',
-}
-
-
-_nameToLevel = {
-    'CRITICAL': CRITICAL,
-    'FATAL': FATAL,
-    'ERROR': ERROR,
-    'WARN': WARNING,
-    'WARNING': WARNING,
-    'INFO': INFO,
-    'DEBUG': DEBUG,
-    'NOTSET': NOTSET,
-}
-
-
 class logger_nameFilter(logging.Filter):
     def __init__(self, logger_names):
         self.logger_names = logger_names
@@ -218,12 +186,13 @@ class PVFilter(logging.Filter):
     def __init__(self, names, level='NOTSET', pv_unrelated_flag=True):
         self.names = names
         self.level = level
+        self.levelno = logging.getLevelName('level')
         self.pv_unrelated_flag = pv_unrelated_flag
 
     def filter(self, record):
         if hasattr(record, 'pv'):
             for i in self.names:
-                if fnmatch.fnmatch(record.pv, i) and record.levelno >= _nameToLevel[self.level]:
+                if fnmatch.fnmatch(record.pv, i) and record.levelno >= self.levelno:
                     return True
             return False
         else:
@@ -250,12 +219,13 @@ class PVOnlyFilter(logging.Filter):
     def __init__(self, names, level='NOTSET', pv_unrelated_flag=False):
         self.names = names
         self.level = level
+        self.levelno = logging.getLevelName('level')
         self.pv_unrelated_flag = pv_unrelated_flag
 
     def filter(self, record):
         if hasattr(record, 'pv'):
             for i in self.names:
-                if fnmatch.fnmatch(record.pv, i) and record.levelno >= _nameToLevel[self.level]:
+                if fnmatch.fnmatch(record.pv, i) and record.levelno >= self.levelno:
                     return True
             return False
         else:
