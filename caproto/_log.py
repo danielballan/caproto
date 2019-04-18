@@ -187,40 +187,6 @@ class PVFilter(logging.Filter):
     '''
     def __init__(self, names, level='NOTSET', exclusive=False):
         self.names = names
-        self.level = level
-        self.levelno = logging.getLevelName(level)
-        self.exclusive = exclusive
-
-    def filter(self, record):
-        if hasattr(record, 'pv'):
-            for i in self.names:
-                if fnmatch.fnmatch(record.pv, i) and record.levelno >= self.levelno:
-                    return True
-            return False
-        else:
-            return not self.exclusive
-
-
-class PVOnlyFilter(logging.Filter):
-    '''
-    99% as same as PVFilter class but only default return for PV unrelated message
-    Pass through only messages relevant to one or more PV names.
-
-    Parameters
-    ----------
-    names : string or list of string
-        PV name or PV name list which will be filtered in.
-
-    Returns
-    -------
-    Bool: True or False
-        False if message is not PV related which doesn't have 'pv' as key in extra
-        True if 'pv' as key exists and pv name exists in Filter list.
-        False if message is PV related but pv name isn't in Filter list.
-    '''
-    def __init__(self, names, level='NOTSET', exclusive=True):
-        self.names = names
-        self.level = level
         self.levelno = logging.getLevelName(level)
         self.exclusive = exclusive
 
@@ -237,7 +203,6 @@ class PVOnlyFilter(logging.Filter):
 class AddressFilter(logging.Filter):
     def __init__(self, address_list, level='NOTSET', exclusive=False):
         self.address_list = address_list
-        self.level = level
         self.levelno = logging.getLevelName(level)
         self.exclusive = exclusive
 
@@ -257,14 +222,16 @@ class AddressFilter(logging.Filter):
 
 
 class RoleFilter(logging.Filter):
-    def __init__(self, roles):
-        self.roles = roles
+    def __init__(self, role, level='NOTSET', exclusive=False):
+        self.roles = role
+        self.levelno = logging.getLevelName(level)
+        self.exclusive = exclusive
 
     def filter(self, record):
         if hasattr(record, 'role'):
-            return record.role in roles
+            return record.role is self.role and record.levelno >= self.levelno
         else:
-            return True
+            return not exclusive
 
 
 def set_handler(file=sys.stdout, datefmt='%H:%M:%S', color=True):
