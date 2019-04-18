@@ -42,6 +42,7 @@ class Broadcaster:
             self.their_role = SERVER
         else:
             self.their_role = CLIENT
+        self.our_address = None
         self.protocol_version = protocol_version
         self.unanswered_searches = {}  # map search id (cid) to name
         # Unlike VirtualCircuit and Channel, there is very little state to
@@ -75,10 +76,11 @@ class Broadcaster:
         history = []
         total_commands = len(commands)
         for i, command in enumerate(commands):
-            tags = {'role': repr(self.our_role)}
+            tags = {'role': repr(self.our_role),
+                    'our_address': self.our_address}
             if hasattr(command, 'name'):
                 tags['pv'] = command.name
-            search_logger.debug(f"Serializing %d of %d %r", 1 + i, total_commands, command, extra=tags)
+            search_logger.debug(f"%d of %d %r", 1 + i, total_commands, command, extra=tags)
             self._process_command(self.our_role, command, history=history)
             bytes_to_send += bytes(command)
         return bytes_to_send
@@ -107,22 +109,17 @@ class Broadcaster:
             raise RemoteProtocolError(f'Broadcaster malformed packet received:'
                                       f' {ex.__class__.__name__} {ex}') from ex
 
+        tags = {'their_address': address,
+            'our_address': self.our_address,
+            'direction': '<<<---',
+            'role': repr(self.our_role)}
         for command in commands:
             if isinstance(command, Beacon):
-                tags = {'address': address,
-                        'role': repr(self.our_role)}
-                self.beacon_log.debug("%s:%d (%dB) -> %r", *address, len(command), command, extra=tags)
+                self.beacon_log.debug("%s:%d (%dB) %r", *address, len(command), command, extra=tags)
             elif hasattr(command, 'ip'):
-                tags = {'address': address,
-                        'receiver_address': (command.ip, command.port),
-                        'role': repr(self.our_role)
-                        }
-                self.log.debug("(%dB) -> %r", len(command), command, extra=tags)
+                self.log.debug("(%dB) %r", len(command), command, extra=tags)
             else:
-                tags = {'address': address,
-                        'role': repr(self.our_role)
-                        }
-                self.log.debug("(%dB) -> %r", len(command), command, extra=tags)
+                self.log.debug("(%dB) %r", len(command), command, extra=tags)
         return commands
 
     def process_commands(self, commands):

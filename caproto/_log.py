@@ -108,10 +108,12 @@ class LogFormatter(logging.Formatter):
 
     def format(self, record):
         record.message = record.getMessage()
-        if hasattr(record, 'receiver_address'):
-            record.message = '--> [%s] %s' % (record.receiver_address[0] + ':' + str(record.receiver_address[1]), record.message)
-        if hasattr(record, 'address'):
-            record.message = '[%s] %s' % (record.address[0] + ':' + str(record.address[1]), record.message)
+        if hasattr(record, 'their_address'):
+            record.message = '[%s] %s' % (record.their_address[0] + ':' + str(record.their_address[1]), record.message)
+        if hasattr(record, 'direction'):
+            record.message = '%s %s' % (record.direction, record.message)
+        if hasattr(record, 'our_address'):
+            record.message = '[%s] %s' % (record.our_address[0] + ':' + str(record.our_address[1]), record.message)
         if hasattr(record, 'pv'):
             record.message = '[%s] %s' % (record.pv, record.message)
         if hasattr(record, 'role'):
@@ -183,11 +185,11 @@ class PVFilter(logging.Filter):
         True if 'pv' as key exists and pv name exists in Filter list.
         False if message is PV related but pv name isn't in Filter list.
     '''
-    def __init__(self, names, level='NOTSET', pv_unrelated_flag=True):
+    def __init__(self, names, level='NOTSET', exclusive=False):
         self.names = names
         self.level = level
         self.levelno = logging.getLevelName(level)
-        self.pv_unrelated_flag = pv_unrelated_flag
+        self.exclusive = exclusive
 
     def filter(self, record):
         if hasattr(record, 'pv'):
@@ -196,7 +198,7 @@ class PVFilter(logging.Filter):
                     return True
             return False
         else:
-            return self.pv_unrelated_flag
+            return not self.exclusive
 
 
 class PVOnlyFilter(logging.Filter):
@@ -216,11 +218,11 @@ class PVOnlyFilter(logging.Filter):
         True if 'pv' as key exists and pv name exists in Filter list.
         False if message is PV related but pv name isn't in Filter list.
     '''
-    def __init__(self, names, level='NOTSET', pv_unrelated_flag=False):
+    def __init__(self, names, level='NOTSET', exclusive=True):
         self.names = names
         self.level = level
         self.levelno = logging.getLevelName(level)
-        self.pv_unrelated_flag = pv_unrelated_flag
+        self.exclusive = exclusive
 
     def filter(self, record):
         if hasattr(record, 'pv'):
@@ -229,37 +231,29 @@ class PVOnlyFilter(logging.Filter):
                     return True
             return False
         else:
-            return self.pv_unrelated_flag
+            return not self.exclusive
 
 
 class AddressFilter(logging.Filter):
-    def __init__(self, address_list):
+    def __init__(self, address_list, level='NOTSET', exclusive=False):
         self.address_list = address_list
+        self.level = level
+        self.levelno = logging.getLevelName(level)
+        self.exclusive = exclusive
 
     def filter(self, record):
-        if hasattr(record, 'address'):
-            address_str = record.address[0] + ':' + str(record.address[1])
-            if address_str in self.address_list:
-                return True
+        if hasattr(record, 'our_address') or hasattr(record, 'their_address'):
+            if record.levelno >= self.levelno:
+                our_address_str = record.our_address[0] + ':' + str(record.our_address[1])
+                their_address_str = record.their_address[0] + ':' + str(record.their_address[1])
+                if our_address_str in self.address_list or their_address_str in self.address_list or record.our_address[0] in self.address_list or record.their_address[0] in self.address_list:
+                    return True
+                else:
+                    return False
             else:
-                return record.address[0] in self.address_list
+                return False
         else:
-            return True
-
-
-class AddressOnlyFilter(logging.Filter):
-    def __init__(self, address_list):
-        self.address_list = address_list
-
-    def filter(self, record):
-        if hasattr(record, 'address'):
-            address_str = record.address[0] + ':' + str(record.address[1])
-            if address_str in self.address_list:
-                return True
-            else:
-                return record.address[0] in self.address_list
-        else:
-            return False
+            return not exclusive
 
 
 class RoleFilter(logging.Filter):
@@ -271,17 +265,6 @@ class RoleFilter(logging.Filter):
             return record.role in roles
         else:
             return True
-
-
-class RoleOnlyFilter(logging.Filter):
-    def __init__(self, roles):
-        self.roles = roles
-
-    def filter(self, record):
-        if hasattr(record, 'role'):
-            return record.role in roles
-        else:
-            return False
 
 
 def set_handler(file=sys.stdout, datefmt='%H:%M:%S', color=True):

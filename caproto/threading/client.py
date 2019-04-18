@@ -338,6 +338,7 @@ class SharedBroadcaster:
         self.listeners = weakref.WeakSet()
 
         self.broadcaster = ca.Broadcaster(our_role=ca.CLIENT)
+        self.broadcaster.our_address = self.udp_sock.getsockname()[:2]
         self.log = logging.LoggerAdapter(self.broadcaster.log, {'role': 'CLIENT'})
         self.search_log = logging.LoggerAdapter(logging.getLogger(f'caproto.bcast.search'), {'role': 'CLIENT'})
         self.command_bundle_queue = Queue()
@@ -442,7 +443,10 @@ class SharedBroadcaster:
             else:
                 specified_port = port
             try:
-                tags = {'role': 'CLIENT', 'address': (host, specified_port)}
+                tags = {'role': 'CLIENT',
+                        'their_address': (host, specified_port),
+                        'our_address': self.udp_sock.getsockname()[:2],
+                        'direction': '--->>>'}
                 self.broadcaster.log.debug(
                     'Sending %d bytes to %s:%d',
                     len(bytes_to_send), host, specified_port, extra=tags)
@@ -598,7 +602,10 @@ class SharedBroadcaster:
                 if isinstance(command, ca.Beacon):
                     now = time.monotonic()
                     address = (command.address, command.server_port)
-                    tags = {'role': 'CLIENT', 'address': address}
+                    tags = {'role': 'CLIENT',
+                            'their_address': address,
+                            'our_address': self.udp_sock.getsockname()[:2],
+                            'direction': '<<<---'}
                     if address not in self.last_beacon:
                         # We made a new friend!
                         self.broadcaster.log.info("Watching Beacons from %s:%d",
@@ -648,7 +655,8 @@ class SharedBroadcaster:
                                 if new_address != accepted_address:
                                     pv_name_logger = logging.LoggerAdapter(search_logger, {
                                                     'pv': name,
-                                                    'address': accepted_address})
+                                                    'their_address': accepted_address,
+                                                    'our_address': self.udp_sock.getsockname()[:2]})
                                     pv_name_logger.warning(
                                         "PV %s with cid %d found on multiple "
                                         "servers. Accepted address is %s:%d. "
@@ -742,7 +750,11 @@ class SharedBroadcaster:
                     # Record that we are checking on this address and set a
                     # deadline for a response.
                     checking[address] = now + RESPONSIVENESS_TIMEOUT
-                    tags = {'role': 'CLIENT', 'address': address}
+                    tags = {'role': 'CLIENT',
+                            'their_address': address,
+                            'our_address': self.udp_sock.getsockname()[:2],
+                            'direction': '->>-'}
+
                     self.broadcaster.log.debug(
                         "Missed Beacons from %s:%d. Sending EchoRequest to "
                         "check that server is responsive.", *address, extra=tags)
@@ -1066,7 +1078,9 @@ class Context:
             # tracking channel state.
             for name in names:
                 log = logging.LoggerAdapter(search_logger, {'pv': name,
-                                                    'address': address,
+                                                    'their_address': address,
+                                                    'our_address': self.broadcaster.udp_sock.getsockname()[:2],
+                                                    'direction': '--->>>',
                                                     'role': 'CLIENT'})
                 log.debug('Connecting %s on circuit with %s:%d', name, *address)
                 # There could be multiple PVs with the same name and
@@ -1092,8 +1106,6 @@ class Context:
                     cm.pvs[cid] = pv
                     channels_grouped_by_circuit[cm].append(chan)
                     pv.circuit_ready.set()
-                    log = logging.LoggerAdapter(pv.log, {'address': address})
-                    log.debug('Connecting %s on circuit with %s:%d', name, *address)
 
             # Initiate channel creation with the server.
             for cm, channels in channels_grouped_by_circuit.items():
@@ -1264,6 +1276,7 @@ class VirtualCircuitManager:
             self.socket = socket.create_connection(self.circuit.address)
             self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
             self.socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+            self.circuit.our_address = self.socket.getsockname()[:2]
             self.selector.add_socket(self.socket, self)
             self.send(ca.VersionRequest(self.circuit.priority,
                                         ca.DEFAULT_PROTOCOL_VERSION),
@@ -1430,7 +1443,8 @@ class VirtualCircuitManager:
         # Ensure that this method is idempotent.
         if self.dead.is_set():
             return
-        tags = {'address': self.circuit.address}
+        tags = {'their_address': self.circuit.address,
+                'our_address': self.sock.getsockname()[:2]}
         self.log.debug('Virtual circuit with address %s:%d has disconnected.',
                        *self.circuit.address, extra=tags)
         # Update circuit state. This will be reflected on all PVs, which
@@ -1467,18 +1481,19 @@ class VirtualCircuitManager:
 
             sock.close()
 
+        tags = {'their_address': self.circuit.address,
+                'our_address': self.sock.getsockname()[:2]}
         if reconnect:
             # Kick off attempt to reconnect all PVs via fresh circuit(s).
-            tags = {'address': self.circuit.address}
             self.log.debug('Kicking off reconnection attempts for %d PVs '
                            'disconnected from %s:%d....',
-                           len(self.channels), *self.circuit.address)
+                           len(self.channels), *self.circuit.address, extra=tags)
             self.context.reconnect(((chan.name, chan.circuit.priority)
                                     for chan in self.channels.values()))
         else:
-            self.log.debug('Not attempting reconnection')
+            self.log.debug('Not attempting reconnection', extra=tags)
 
-        self.log.debug("Shutting down ThreadPoolExecutor for user callbacks")
+        self.log.debug("Shutting down ThreadPoolExecutor for user callbacks", extra=tags)
         self.user_callback_executor.shutdown()
 
     def disconnect(self):
