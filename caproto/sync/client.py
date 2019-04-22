@@ -48,6 +48,7 @@ def recv(circuit):
 def search(pv_name, udp_sock, timeout, *, max_retries=2):
     # Set Broadcaster log level to match our logger.
     b = ca.Broadcaster(our_role=ca.CLIENT)
+    b.our_address = self.udp_sock.getsockname()[:2]
 
     # Send registration request to the repeater
     logger.debug('Registering with the Channel Access repeater.')
@@ -138,6 +139,7 @@ def make_channel(pv_name, udp_sock, priority, timeout):
             our_role=ca.CLIENT,
             address=address,
             priority=priority)
+        circuit.our_address = udp_sock.getsockname()[:2]
 
     chan = ca.ClientChannel(pv_name, circuit)
     new = False
