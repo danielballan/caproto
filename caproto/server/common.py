@@ -51,6 +51,7 @@ class VirtualCircuit:
     def __init__(self, circuit, client, context):
         self.connected = True
         self.circuit = circuit  # a caproto.VirtualCircuit
+        self.circuit.our_address = client.getsockname()[:2]
         self.log = circuit.log
         self.client = client
         self.context = context
@@ -960,7 +961,7 @@ class Context:
         '''Handler for each new TCP client to the server'''
         cavc = ca.VirtualCircuit(ca.SERVER, addr, None)
         circuit = self.CircuitClass(cavc, client, self)
-        print('__dic__:', client.__dict__)
+        self.circuits.add(circuit)
         self.log.info('Connected to new client at %s:%d (total: %d).', *addr,
                       len(self.circuits))
 

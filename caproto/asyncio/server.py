@@ -76,6 +76,9 @@ class VirtualCircuit(_VirtualCircuit):
                 self.loop = loop
                 self.client = client
 
+            def getsockname(self):
+                return self.client.getsockname()
+
             async def recv(self, nbytes):
                 return (await self.loop.sock_recv(self.client, 4096))
 
@@ -199,7 +202,7 @@ class Context(_Context):
                 self.transport = transport
 
             def getsockname(self):
-                return self.transport.get_extra_info('remote_addr')
+                return self.transport.get_extra_info('sockname')
 
             async def sendto(self, bytes_to_send, addr_port):
                 try:

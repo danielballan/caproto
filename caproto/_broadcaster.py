@@ -43,7 +43,7 @@ class Broadcaster:
         else:
             self.their_role = CLIENT
         self.our_address = None
-        self.our_addresses = []
+        self._our_addresses = []
         self.protocol_version = protocol_version
         self.unanswered_searches = {}  # map search id (cid) to name
         # Unlike VirtualCircuit and Channel, there is very little state to

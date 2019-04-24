@@ -113,7 +113,6 @@ class LogFormatter(logging.Formatter):
         if hasattr(record, 'direction'):
             record.message = '%s %s' % (record.direction, record.message)
         if hasattr(record, 'our_address'):
-            print('rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrecord.our_address.:', record.our_address)
             record.message = '[%s] %s' % (record.our_address[0] + ':' + str(record.our_address[1]), record.message)
         if hasattr(record, 'pv'):
             record.message = '[%s] %s' % (record.pv, record.message)
