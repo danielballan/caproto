@@ -113,11 +113,13 @@ class LogFormatter(logging.Formatter):
         if hasattr(record, 'direction'):
             record.message = '%s %s' % (record.direction, record.message)
         if hasattr(record, 'our_address'):
+            print('rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrecord.our_address.:', record.our_address)
             record.message = '[%s] %s' % (record.our_address[0] + ':' + str(record.our_address[1]), record.message)
         if hasattr(record, 'pv'):
             record.message = '[%s] %s' % (record.pv, record.message)
         if hasattr(record, 'role'):
             record.message = '[%s] %s' % (record.role, record.message)
+
         record.asctime = self.formatTime(record, self.datefmt)
 
         try:
@@ -138,7 +140,7 @@ class LogFormatter(logging.Formatter):
 
 plain_log_format = "[%(levelname)1.1s %(asctime)s.%(msecs)03d %(module)s:%(lineno)d] %(message)s"
 color_log_format = ("%(color)s[%(levelname)1.1s %(asctime)s.%(msecs)03d "
-                    "%(module)s:%(lineno)d]%(end_color)s %(message)s")
+                    "%(module)15s:%(lineno)5d]%(end_color)s %(message)s")
 
 
 def color_logs(color):
@@ -187,7 +189,12 @@ class PVFilter(logging.Filter):
     '''
     def __init__(self, names, level='NOTSET', exclusive=False):
         self.names = names
-        self.levelno = logging.getLevelName(level)
+        if isinstance(level, int):
+            self.levelno = level
+        elif isinstance(level, str):
+            self.levelno = logging.getLevelName(level)
+        else:
+            raise ValueError('level should be either string or int')
         self.exclusive = exclusive
 
     def filter(self, record):
@@ -203,7 +210,12 @@ class PVFilter(logging.Filter):
 class AddressFilter(logging.Filter):
     def __init__(self, address_list, level='NOTSET', exclusive=False):
         self.address_list = address_list
-        self.levelno = logging.getLevelName(level)
+        if isinstance(level, int):
+            self.levelno = level
+        elif isinstance(level, str):
+            self.levelno = logging.getLevelName(level)
+        else:
+            raise ValueError('level should be either string or int')
         self.exclusive = exclusive
 
     def filter(self, record):
@@ -224,7 +236,12 @@ class AddressFilter(logging.Filter):
 class RoleFilter(logging.Filter):
     def __init__(self, role, level='NOTSET', exclusive=False):
         self.roles = role
-        self.levelno = logging.getLevelName(level)
+        if isinstance(level, int):
+            self.levelno = level
+        elif isinstance(level, str):
+            self.levelno = logging.getLevelName(level)
+        else:
+            raise ValueError('level should be either string or int')
         self.exclusive = exclusive
 
     def filter(self, record):

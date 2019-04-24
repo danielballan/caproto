@@ -14,8 +14,7 @@ from .._dbr import SubscriptionType
 # ** Tuning this parameters will affect the servers' performance **
 # ** under high load. **
 # If the queue of subscriptions to has a new update ready within this timeout,
-# we consider ourselves under high load and trade accept some latency for some
-# efficiency.
+# we consider ourselves under high load and trade accept some latency for some # efficiency.
 HIGH_LOAD_TIMEOUT = 0.01
 # When a batch of subscription updates has this many bytes or more, send it.
 SUB_BATCH_THRESH = 2**16
@@ -584,6 +583,7 @@ class Context:
         self.pvdb = pvdb
         self.log = logging.getLogger(f'caproto.ctx.{id(self)}')
 
+        self.addresses = []
         self.circuits = set()
         self.broadcaster = ca.Broadcaster(our_role=ca.SERVER)
 
@@ -960,7 +960,7 @@ class Context:
         '''Handler for each new TCP client to the server'''
         cavc = ca.VirtualCircuit(ca.SERVER, addr, None)
         circuit = self.CircuitClass(cavc, client, self)
-        self.circuits.add(circuit)
+        print('__dic__:', client.__dict__)
         self.log.info('Connected to new client at %s:%d (total: %d).', *addr,
                       len(self.circuits))
 

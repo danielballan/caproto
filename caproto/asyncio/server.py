@@ -12,7 +12,7 @@ class ServerExit(Exception):
     ...
 
 
-class Event(asyncio.Event):
+class Event(asyncio.Event): 
     "Implement the ``timeout`` keyword to wait(), as in threading.Event."
     async def wait(self, timeout=None):
         try:
@@ -197,6 +197,9 @@ class Context(_Context):
             """Make an asyncio transport something you can call sendto on."""
             def __init__(self, transport):
                 self.transport = transport
+
+            def getsockname(self):
+                return self.transport.get_extra_info('remote_addr')
 
             async def sendto(self, bytes_to_send, addr_port):
                 try:

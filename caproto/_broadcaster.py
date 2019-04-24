@@ -43,6 +43,7 @@ class Broadcaster:
         else:
             self.their_role = CLIENT
         self.our_address = None
+        self.our_addresses = []
         self.protocol_version = protocol_version
         self.unanswered_searches = {}  # map search id (cid) to name
         # Unlike VirtualCircuit and Channel, there is very little state to
@@ -55,6 +56,15 @@ class Broadcaster:
         )
         self.log = logging.getLogger(f"caproto.bcast")
         self.beacon_log = logging.getLogger('caproto.bcast.beacon')
+
+    @property
+    def our_addresses(self):
+        return self._our_addresses
+
+    @our_addresses.setter
+    def our_addresses(self, value):
+        self._our_addresses = value
+        self.loggers = {address: CaprotoLoggerAdapter(self.log, extra={'our_address': address}) for address in self._our_addresses}
 
     def send(self, *commands):
         """
@@ -76,10 +86,11 @@ class Broadcaster:
         history = []
         total_commands = len(commands)
         for i, command in enumerate(commands):
-            tags = {'role': repr(self.our_role),
-                    'our_address': self.our_address}
+            tags = {'role': repr(self.our_role)}
             if hasattr(command, 'name'):
                 tags['pv'] = command.name
+            for address in self.our_addresses:
+                tags['our_address'] = address
             search_logger.debug(f"%d of %d %r", 1 + i, total_commands, command, extra=tags)
             self._process_command(self.our_role, command, history=history)
             bytes_to_send += bytes(command)
@@ -109,17 +120,21 @@ class Broadcaster:
             raise RemoteProtocolError(f'Broadcaster malformed packet received:'
                                       f' {ex.__class__.__name__} {ex}') from ex
 
+
         tags = {'their_address': address,
-            'our_address': self.our_address,
             'direction': '<<<---',
             'role': repr(self.our_role)}
         for command in commands:
             if isinstance(command, Beacon):
                 self.beacon_log.debug("%s:%d (%dB) %r", *address, len(command), command, extra=tags)
             elif hasattr(command, 'ip'):
-                self.log.debug("(%dB) %r", len(command), command, extra=tags)
+                for address in self.our_addresses:
+                    tags['our_address'] = address
+                    self.log.debug("(%dB) %r", len(command), command, extra=tags)
             else:
-                self.log.debug("(%dB) %r", len(command), command, extra=tags)
+                for address in self.our_addresses:
+                    tags['our_address'] = address
+                    self.log.debug("(%dB) %r", len(command), command, extra=tags)
         return commands
 
     def process_commands(self, commands):
