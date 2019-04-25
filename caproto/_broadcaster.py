@@ -88,11 +88,8 @@ class Broadcaster:
         for i, command in enumerate(commands):
             if hasattr(command, 'name'):
                 tags['pv'] = command.name
-            if len(self._our_addresses) > 0:
-                for address in self._our_addresses:
-                    tags['our_address'] = address
-                    search_logger.debug(f"%d of %d %r", 1 + i, total_commands, command, extra=tags)
-            else:
+            for address in self._our_addresses:
+                tags['our_address'] = address
                 search_logger.debug(f"%d of %d %r", 1 + i, total_commands, command, extra=tags)
             self._process_command(self.our_role, command, history=history)
             bytes_to_send += bytes(command)

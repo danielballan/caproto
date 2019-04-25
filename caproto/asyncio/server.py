@@ -165,6 +165,7 @@ class Context(_Context):
             s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             s.setblocking(False)
             s.bind((interface, port))
+            self.broadcaster._our_addresses.append(s.getsockname()[:2])
             return s
         self.port, self.tcp_sockets = await self._bind_tcp_sockets_with_consistent_port_number(
             make_socket)

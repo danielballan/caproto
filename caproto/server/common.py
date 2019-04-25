@@ -736,7 +736,6 @@ class Context:
                 bytes_to_send = self.broadcaster.send(*search_replies)
 
             for udp_sock in self.udp_socks.values():
-                self.broadcaster._our_addresses.append(udp_sock.getsockname()[:2])
                 try:
                     await udp_sock.sendto(bytes_to_send, addr)
                 except OSError as exc:
