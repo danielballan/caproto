@@ -127,7 +127,7 @@ class Broadcaster:
             'direction': '<<<---',
             'role': repr(self.our_role)}
         for command in commands:
-            for address in self.our_addresses:
+            for address in self._our_addresses:
                 tags['our_address'] = address
                 if isinstance(command, Beacon):
                     self.beacon_log.debug("%s:%d (%dB) %r", *address, len(command), command, extra=tags)
