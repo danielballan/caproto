@@ -436,17 +436,17 @@ class SharedBroadcaster:
         Process a command and transport it over the UDP socket.
         """
         bytes_to_send = self.broadcaster.send(*commands)
+        tags = {'role': 'CLIENT',
+                'our_address': self.broadcaster.our_address,
+                'direction': '--->>>'}
         for host in ca.get_address_list():
             if ':' in host:
                 host, _, port_as_str = host.partition(':')
                 specified_port = int(port_as_str)
             else:
                 specified_port = port
+                tags['their_address'] = (host, specified_port)
             try:
-                tags = {'role': 'CLIENT',
-                        'their_address': (host, specified_port),
-                        'our_address': self.udp_sock.getsockname()[:2],
-                        'direction': '--->>>'}
                 self.broadcaster.log.debug(
                     'Sending %d bytes to %s:%d',
                     len(bytes_to_send), host, specified_port, extra=tags)
@@ -598,14 +598,14 @@ class SharedBroadcaster:
 
             queues.clear()
             now = time.monotonic()
+            tags = {'role': 'CLIENT',
+                    'our_address': self.broadcaster.our_address,
+                    'direction': '<<<---'}
             for command in commands:
                 if isinstance(command, ca.Beacon):
                     now = time.monotonic()
                     address = (command.address, command.server_port)
-                    tags = {'role': 'CLIENT',
-                            'their_address': address,
-                            'our_address': self.udp_sock.getsockname()[:2],
-                            'direction': '<<<---'}
+                    tags['their_address'] = address
                     if address not in self.last_beacon:
                         # We made a new friend!
                         self.broadcaster.log.info("Watching Beacons from %s:%d",
@@ -618,7 +618,7 @@ class SharedBroadcaster:
                             # address may have restarted.
                             self.broadcaster.log.info(
                                 "Beacon anomaly: %s:%d may have restarted.",
-                                *address)
+                                *address, extra=tags)
                             self._new_server_found()
                         self.last_beacon_interval[address] = interval
                     self.last_beacon[address] = now

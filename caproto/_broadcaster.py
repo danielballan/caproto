@@ -14,7 +14,6 @@ from ._commands import (Beacon, RepeaterConfirmResponse, RepeaterRegisterRequest
                         )
 from ._log import logger, ch_logger, search_logger
 
-
 __all__ = ('Broadcaster',)
 
 
@@ -85,13 +84,16 @@ class Broadcaster:
         bytes_to_send = b''
         history = []
         total_commands = len(commands)
+        tags = {'role': repr(self.our_role)}
         for i, command in enumerate(commands):
-            tags = {'role': repr(self.our_role)}
             if hasattr(command, 'name'):
                 tags['pv'] = command.name
-            for address in self.our_addresses:
-                tags['our_address'] = address
-            search_logger.debug(f"%d of %d %r", 1 + i, total_commands, command, extra=tags)
+            if len(self._our_addresses) > 0:
+                for address in self._our_addresses:
+                    tags['our_address'] = address
+                    search_logger.debug(f"%d of %d %r", 1 + i, total_commands, command, extra=tags)
+            else:
+                search_logger.debug(f"%d of %d %r", 1 + i, total_commands, command, extra=tags)
             self._process_command(self.our_role, command, history=history)
             bytes_to_send += bytes(command)
         return bytes_to_send
@@ -125,15 +127,11 @@ class Broadcaster:
             'direction': '<<<---',
             'role': repr(self.our_role)}
         for command in commands:
-            if isinstance(command, Beacon):
-                self.beacon_log.debug("%s:%d (%dB) %r", *address, len(command), command, extra=tags)
-            elif hasattr(command, 'ip'):
-                for address in self.our_addresses:
-                    tags['our_address'] = address
-                    self.log.debug("(%dB) %r", len(command), command, extra=tags)
-            else:
-                for address in self.our_addresses:
-                    tags['our_address'] = address
+            for address in self.our_addresses:
+                tags['our_address'] = address
+                if isinstance(command, Beacon):
+                    self.beacon_log.debug("%s:%d (%dB) %r", *address, len(command), command, extra=tags)
+                else:
                     self.log.debug("(%dB) %r", len(command), command, extra=tags)
         return commands
 

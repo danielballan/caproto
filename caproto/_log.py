@@ -169,6 +169,22 @@ class logger_nameFilter(logging.Filter):
         return False
 
 
+def validate_level(level)-> int:
+    '''
+    Return a int for level comparison
+
+    '''
+    if isinstance(level, int):
+        levelno = level
+    elif isinstance(level, str):
+        levelno = logging.getLevelName(level)
+
+    if isinstance(levelno, int):
+        return levelno
+    else:
+        raise ValueError('argument level should be either one of string in LOG LEVEL or int')
+
+
 class PVFilter(logging.Filter):
     '''
     Pass through only messages relevant to one or more PV names and
@@ -188,12 +204,7 @@ class PVFilter(logging.Filter):
     '''
     def __init__(self, names, level='NOTSET', exclusive=False):
         self.names = names
-        if isinstance(level, int):
-            self.levelno = level
-        elif isinstance(level, str):
-            self.levelno = logging.getLevelName(level)
-        else:
-            raise ValueError('level should be either string or int')
+        self.levelno = validate_level(level)
         self.exclusive = exclusive
 
     def filter(self, record):
@@ -208,21 +219,19 @@ class PVFilter(logging.Filter):
 
 class AddressFilter(logging.Filter):
     def __init__(self, address_list, level='NOTSET', exclusive=False):
-        self.address_list = address_list
-        if isinstance(level, int):
-            self.levelno = level
-        elif isinstance(level, str):
-            self.levelno = logging.getLevelName(level)
-        else:
-            raise ValueError('level should be either string or int')
+        self.address_list = [tuple(address) if len(address.split(':')) == 1 else (address.split(':')[0], address.split(':')[1]) for address in address_list]
+        self.levelno = validate_level(level)
         self.exclusive = exclusive
-
+    '''
     def filter(self, record):
         if hasattr(record, 'our_address') or hasattr(record, 'their_address'):
             if record.levelno >= self.levelno:
                 our_address_str = record.our_address[0] + ':' + str(record.our_address[1])
                 their_address_str = record.their_address[0] + ':' + str(record.their_address[1])
-                if our_address_str in self.address_list or their_address_str in self.address_list or record.our_address[0] in self.address_list or record.their_address[0] in self.address_list:
+                if our_address_str in self.address_list \
+                        or their_address_str in self.address_list \
+                        or record.our_address[0] in self.address_list \
+                        or record.their_address[0] in self.address_list:
                     return True
                 else:
                     return False
@@ -230,17 +239,28 @@ class AddressFilter(logging.Filter):
                 return False
         else:
             return not exclusive
+    ''' 
+    def filter(self, record):
+        if hasattr(record, 'our_address') or hasattr(record, 'their_address'):
+            if record.levelno >= self.levelno:
+                for address in self.address_list:
+                    if record.our_address == address \
+                            or record.their_address == address \
+                            or record.our_address[0] == address[0] \
+                            or record.their_address[0] == address[0]:
+                        return True
+                else:
+                    return False
+            else:
+                return False
+        else:
+            return not self.exclusive
 
 
 class RoleFilter(logging.Filter):
     def __init__(self, role, level='NOTSET', exclusive=False):
         self.roles = role
-        if isinstance(level, int):
-            self.levelno = level
-        elif isinstance(level, str):
-            self.levelno = logging.getLevelName(level)
-        else:
-            raise ValueError('level should be either string or int')
+        self.levelno = validate_level(level)
         self.exclusive = exclusive
 
     def filter(self, record):

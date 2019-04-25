@@ -12,7 +12,7 @@ class ServerExit(Exception):
     ...
 
 
-class Event(asyncio.Event): 
+class Event(asyncio.Event):
     "Implement the ``timeout`` keyword to wait(), as in threading.Event."
     async def wait(self, timeout=None):
         try:
