@@ -218,39 +218,36 @@ class PVFilter(logging.Filter):
 
 
 class AddressFilter(logging.Filter):
-    def __init__(self, address_list, level='NOTSET', exclusive=False):
-        self.address_list = [tuple(address) if len(address.split(':')) == 1 else (address.split(':')[0], address.split(':')[1]) for address in address_list]
+
+    def __init__(self, addresses_list, level='NOTSET', exclusive=False):
+        self.addresses_list = []
+        self.hosts_list = []
+        for address in addresses_list:
+            if isinstance(address, str):
+                if ':' in address:
+                    self.addresses_list.append(tuple(address.split(':')))
+                else:
+                    self.hosts_list.append(address)
+            elif isinstance(address, tuple):
+                if len(address) == 2:
+                    self.addresses_list.append(address)
+                elif len(address) == 1:
+                    self.hosts_list.append(address[0])
+                else:
+                    raise ValueError('The target addresses should be a list of string, \'XX.XX.XX.XX:YYYY\' or tuple, (\'XX.XX.XX.XX\', YYYY)')
+            else:
+                raise ValueError('The target addresses should be a list of string, \'XX.XX.XX.XX:YYYY\' or tuple, (\'XX.XX.XX.XX\', YYYY)')
+
         self.levelno = validate_level(level)
         self.exclusive = exclusive
-    '''
+
     def filter(self, record):
         if hasattr(record, 'our_address') or hasattr(record, 'their_address'):
             if record.levelno >= self.levelno:
-                our_address_str = record.our_address[0] + ':' + str(record.our_address[1])
-                their_address_str = record.their_address[0] + ':' + str(record.their_address[1])
-                if our_address_str in self.address_list \
-                        or their_address_str in self.address_list \
-                        or record.our_address[0] in self.address_list \
-                        or record.their_address[0] in self.address_list:
-                    return True
-                else:
-                    return False
-            else:
-                return False
-        else:
-            return not exclusive
-    ''' 
-    def filter(self, record):
-        if hasattr(record, 'our_address') or hasattr(record, 'their_address'):
-            if record.levelno >= self.levelno:
-                for address in self.address_list:
-                    if record.our_address == address \
-                            or record.their_address == address \
-                            or record.our_address[0] == address[0] \
-                            or record.their_address[0] == address[0]:
-                        return True
-                else:
-                    return False
+                return record.our_address in self.addresses_list \
+                        or record.our_address[0] in self.hosts_list \
+                        or record.their_address in self.addresses_list \
+                        or record.their_address[0] in self.hosts_list
             else:
                 return False
         else:
