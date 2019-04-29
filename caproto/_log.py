@@ -129,6 +129,7 @@ class LogFormatter(logging.Formatter):
             record.end_color = ''
 
         formatted = self._fmt % record.__dict__
+        #formatted = self._fmt.format(**record.__dict__)
 
         if record.exc_info and not record.exc_text:
             record.exc_text = self.formatException(record.exc_info)
@@ -140,6 +141,7 @@ class LogFormatter(logging.Formatter):
 plain_log_format = "[%(levelname)1.1s %(asctime)s.%(msecs)03d %(module)s:%(lineno)d] %(message)s"
 color_log_format = ("%(color)s[%(levelname)1.1s %(asctime)s.%(msecs)03d "
                     "%(module)15s:%(lineno)5d]%(end_color)s %(message)s")
+#color_log_format = "{color:s}[{levelname:1.1s} {asctime:s.}{msecs:03d}{module:15s}:{lineno:5d}]{end_color:s} {message:s}'
 
 
 def color_logs(color):
@@ -159,12 +161,13 @@ search_logger = logging.getLogger('caproto.bcast.search')
 current_handler = None  # overwritten below
 
 
-class logger_nameFilter(logging.Filter):
-    def __init__(self, logger_names):
+class LoggerNameFilter(logging.Filter):
+    def __init__(self, logger_names, level='NOSET'):
         self.logger_names = logger_names
+        self.levelno = validate_level(level)
     def filter(self, record):
         for i in self.logger_names:
-            if fnmatch.fnmatch(record.name, i):
+            if fnmatch.fnmatch(record.name, i) and record.levelno >= self.levelno:
                 return True
         return False
 
@@ -225,14 +228,13 @@ class AddressFilter(logging.Filter):
         for address in addresses_list:
             if isinstance(address, str):
                 if ':' in address:
-                    self.addresses_list.append(tuple(address.split(':')))
+                    address_temp = address.split(':')
+                    self.addresses_list.append((address_temp[0], int(address[1])))
                 else:
                     self.hosts_list.append(address)
             elif isinstance(address, tuple):
                 if len(address) == 2:
                     self.addresses_list.append(address)
-                elif len(address) == 1:
-                    self.hosts_list.append(address[0])
                 else:
                     raise ValueError('The target addresses should be a list of string, \'XX.XX.XX.XX:YYYY\' or tuple, (\'XX.XX.XX.XX\', YYYY)')
             else:
@@ -267,7 +269,7 @@ class RoleFilter(logging.Filter):
             return not exclusive
 
 
-def set_handler(file=sys.stdout, datefmt='%H:%M:%S', color=True):
+def set_handler(file=sys.stdout, datefmt='%H:%M:%S', level='INFO', color=True):
     """
     Set a new handler on the ``logging.getLogger('caproto')`` logger.
 
@@ -309,7 +311,7 @@ def set_handler(file=sys.stdout, datefmt='%H:%M:%S', color=True):
         handler = logging.FileHandler(file)
     else:
         handler = logging.StreamHandler(file)
-    handler.setLevel('DEBUG')
+    handler.setLevel(level)
     if color:
         format = color_log_format
     else:

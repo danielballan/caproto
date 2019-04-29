@@ -927,7 +927,7 @@ class Context:
             client_name = getpass.getuser()
         self.max_workers = max_workers
         self.client_name = client_name
-        self.log = logging.LoggerAdapter(logging.getLogger(f'caproto.ctx.{id(self)}'), {'role': 'CLIENT'})
+        self.log = logging.LoggerAdapter(logging.getLogger(f'caproto.ctx'), {'role': 'CLIENT'})
         self.pv_cache_lock = threading.RLock()
         self.circuit_managers = {}  # keyed on ((host, port), priority)
         self._lock_during_get_circuit_manager = threading.RLock()
